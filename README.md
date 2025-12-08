@@ -52,7 +52,7 @@ Use the following commands in your terminal to clone the source code and prepare
 
 # Clone the repository
 ```bash
-git clone [https://github.com/birukdjn/MoviesApi.git](https://github.com/birukdjn/MoviesApi.git)
+git clone https://github.com/birukdjn/MoviesApi.git
 ```
 # Navigate into the project directory
 ```bash
