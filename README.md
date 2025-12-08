@@ -56,7 +56,7 @@ git clone https://github.com/birukdjn/MoviesApi.git
 ```
 # Navigate into the project directory
 ```bash
-cd MoviesApi
+cd MoviesApi/Backend
 ```
 
 # Restore project dependencies
