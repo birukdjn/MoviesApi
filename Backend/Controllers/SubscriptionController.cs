@@ -1,10 +1,11 @@
-﻿using Backend.data;
-using Backend.DTOs;
-using Backend.models;
+﻿using Backend.Data;
+using Backend.DTOs.Payments;
+using Backend.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using Backend.Enums;
 
 namespace Backend.Controllers
 {
@@ -37,11 +38,11 @@ namespace Backend.Controllers
           {
               Id = s.Id,
               UserId = s.UserId,
-              Plan = s.Plan,
+              Plan = s.Plan.ToString(),
               StartDate = s.StartDate,
               EndDate = s.EndDate,
               TxRef = s.TxRef,
-              Status = s.Status,
+              Status = s.Status.ToString(),
               IsActive = s.Status == SubscriptionStatus.Active && (s.EndDate == null || s.EndDate > DateTime.UtcNow)
           })
           .ToListAsync();
@@ -92,11 +93,11 @@ namespace Backend.Controllers
             {
                 Id = subscription.Id,
                 UserId = subscription.UserId,
-                Plan = subscription.Plan,
+                Plan = subscription.Plan.ToString(),
                 StartDate = subscription.StartDate,
                 EndDate = subscription.EndDate,
                 TxRef = subscription.TxRef,
-                Status = subscription.Status,
+                Status = subscription.Status.ToString(),
                 IsActive = subscription.IsActive
             };
 

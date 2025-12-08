@@ -1,4 +1,4 @@
-﻿namespace Backend.models
+﻿namespace Backend.Models
 {
     
    
@@ -12,6 +12,7 @@
         public string PasswordHash { get; set; } = string.Empty;
         public string? Avatar { get; set; }
         public string Role { get; set; } = "User";
+        public bool IsActive { get; set; } = true;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public string? LastLoginIp { get; set; }
         public string? RefreshToken { get; set; }

@@ -1,8 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Backend.data;
-using Backend.DTOs;
-using Backend.models;
+using Backend.Data;
+using Backend.Models;
+using Backend.DTOs.Playback;
 
 namespace Backend.Controllers
 {

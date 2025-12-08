@@ -1,6 +1,6 @@
 ﻿
 
-namespace Backend.models
+namespace Backend.Models
 {
     public class Genre
     {

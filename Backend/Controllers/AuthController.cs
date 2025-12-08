@@ -1,7 +1,7 @@
-﻿using Backend.data;
-using Backend.DTOs;
-using Backend.models;
-using Backend.Services;
+﻿using Backend.Data;
+using Backend.DTOs.Users;
+using Backend.Models;
+using Backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,12 +11,13 @@ namespace Backend.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class AuthController(AppDbContext context, IJwtService jwt, IEmailSender emailSender, ISmsService smsService) : ControllerBase
+    public class AuthController(AppDbContext context, IJwtService jwt, IEmailSender emailSender, ISmsService smsService, IPasswordService passwordService) : ControllerBase
     {
         private readonly AppDbContext _context = context;
         private readonly IJwtService _jwt = jwt;
         private readonly IEmailSender _emailSender = emailSender;
         private readonly ISmsService _smsService = smsService;
+        private readonly IPasswordService _passwordService = passwordService;
 
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] UserRegisterDto dto)
@@ -24,7 +25,7 @@ namespace Backend.Controllers
             if (await _context.Users.AnyAsync(u => u.Username == dto.Username || u.Email == dto.Email))
                 return BadRequest("Username or Email already exists.");
 
-            string passwordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
+            string passwordHash = _passwordService.HashPassword(dto.Password);
 
             var user = new User
             {
@@ -108,84 +109,7 @@ namespace Backend.Controllers
                     defaultProfile.Avatar,
                 }
             });
-        }
-        private string GenerateRandomPassword(int length = 12)
-        {
-            const string validChars = "ABCDEFGHJKLMNOPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789!@$?_-";
-            var random = new Random();
-            var password = new char[length];
-
-            for (int i = 0; i < length; i++)
-            {
-                password[i] = validChars[random.Next(validChars.Length)];
-            }
-            return new string(password);
-        }
-
-
-        [HttpPost("create-admin")]
-        [Authorize(Roles = "Admin")] 
-        public async Task<IActionResult> CreateUserByAdmin([FromBody] UserCreateByAdminDto dto)
-        {
-            if (await _context.Users.AnyAsync(u => u.Username == dto.Username || u.Email == dto.Email))
-                return BadRequest("Username or Email already exists.");
-
-            // 1. Generate Temporary Password
-            string tempPassword = GenerateRandomPassword();
-            string passwordHash = BCrypt.Net.BCrypt.HashPassword(tempPassword);
-
-            // 2. Create User Record
-            var user = new User
-            {
-                Username = dto.Username,
-                Email = dto.Email,
-                Phone = dto.Phone ?? string.Empty,
-                PasswordHash = passwordHash,
-                Role = "Admin",
-                Avatar = "default_avatar.png"
-
-
-            };
-
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
-         
-            // 4. Send Email with Temporary Password
-            try
-            {
-                var emailBody = $"<h1>Account Created Successfully!</h1>" +
-                                $"<p>An administrator has created an account for you with the following details:</p>" +
-                                $"<ul>" +
-                                $"<li><strong>Username:</strong> {user.Username}</li>" +
-                                $"<li><strong>Temporary Password:</strong> <code>{tempPassword}</code></li>" + 
-                                $"</ul>" +
-                                $"<p>Please log in immediately and change your password for security purposes.</p>";
-
-                var message = new Message(
-                    [user.Email],
-                    "Your New Account Credentials",
-                    emailBody
-                );
-
-                _emailSender.SendEmail(message);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error sending temporary password email to {user.Email}: {ex.Message}");
-                
-            }
-
-            return Ok(new
-            {
-                message = $"User {user.Username} created and temporary password sent to {user.Email}.",
-                userId = user.Id,
-                username = user.Username,
-                role = user.Role
-
-            });
-        }
-
+        }       
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] UserLoginDto dto)
@@ -193,35 +117,39 @@ namespace Backend.Controllers
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.Email == dto.LoginIdentifier || u.Username == dto.LoginIdentifier);
 
-            if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
+            if (user == null || !_passwordService.VerifyPassword(dto.Password, user.PasswordHash))
                 return Unauthorized(new { message = "Invalid credentials" });
 
-            var currentIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+ 
+            var currentIp = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+                            ?? HttpContext.Connection.RemoteIpAddress?.ToString();
 
-            if (!string.IsNullOrEmpty(currentIp) && user.LastLoginIp != currentIp)
+
+            if (user.LastLoginIp != currentIp)
             {
                 try
                 {
-                    var securityAlertMessage = new Message(
+                    var msg = new Message(
                         [user.Email],
                         "Security Alert: New Login Location Detected",
-                        $"<p>A login was just detected for your account from a new IP address: <strong>{currentIp}</strong>.</p><p>If this was you, you can safely ignore this email. If this was not you, please change your password immediately.</p>"
-                        
-
+                        $"""
+                        <p>A login was detected from IP: <strong>{currentIp}</strong>.</p>
+                        <p>If this wasn't you, please change your password.</p>
+                        """
                     );
-                    _emailSender.SendEmail(securityAlertMessage);
 
-                    
-                    // Update the user's last login IP
-                    user.LastLoginIp = currentIp;
-                    await _context.SaveChangesAsync(); // Save the IP change
+                    _emailSender.SendEmail(msg);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error sending security alert email to {user.Email}: {ex.Message}");
+                    Console.WriteLine($"Error sending IP alert: {ex.Message}");
                 }
-            }
 
+            }
+            user.LastLoginIp = currentIp;
+            await _context.SaveChangesAsync();
+
+            
             var userToken = _jwt.GenerateUserToken(user);
 
             // ✅ Separate logic for Admin
@@ -303,10 +231,10 @@ namespace Backend.Controllers
                 if (string.IsNullOrEmpty(dto.CurrentPassword))
                     return BadRequest("Current password is required to change password.");
 
-                if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
+                if (_passwordService.VerifyPassword(dto.CurrentPassword, user.PasswordHash))
                     return Unauthorized(new { message = "Incorrect current password." });
 
-                user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+                user.PasswordHash = _passwordService.HashPassword(dto.NewPassword);
                 changesMade = true;
             }
 
@@ -317,25 +245,6 @@ namespace Backend.Controllers
             }
 
             return Ok(new { message = "No changes submitted." });
-        }
-
-        [HttpGet("users")]
-        [Authorize(Roles = "Admin")]
-        public async Task<ActionResult<IEnumerable<UserPublicDto>>> GetRegisteredUsers()
-        {
-            var users = await _context.Users
-                .Select(u => new UserPublicDto
-                {
-                    Id = u.Id,
-                    Email = u.Email,
-                    Username = u.Username,
-                    Role = u.Role
-                })
-                .ToListAsync();
-
-            if (users.Count==0) return NotFound("No users found.");
-
-            return Ok(users);
         }
 
         [HttpPost("refresh")]
@@ -358,7 +267,6 @@ namespace Backend.Controllers
         }
         private string GeneratePasswordResetToken()
         {
-            // Generate a secure token (e.g., a GUID or a secure random string)
             return Guid.NewGuid().ToString("N");
         }
 
@@ -426,7 +334,7 @@ namespace Backend.Controllers
             }
 
             // 3. Hash and Update Password
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+            user.PasswordHash = _passwordService.HashPassword(dto.NewPassword);
 
             // 4. Invalidate Token
             user.PasswordResetToken = null;

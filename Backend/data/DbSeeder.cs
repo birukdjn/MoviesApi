@@ -1,11 +1,12 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Backend.models;
+using Backend.Models;
+using Backend.Services.Interfaces;
 
-namespace Backend.data
+namespace Backend.Data
 {
     public static class DbSeeder
     {
-        public static void Seed(AppDbContext context)
+        public static void Seed(AppDbContext context, IPasswordService PasswordService)
         {
             try
             {
@@ -23,7 +24,7 @@ namespace Backend.data
                 {
                     Username = "Birukdjn",
                     Email = "Birukedjn@gmail.com",
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Birukdjn@8325"),
+                    PasswordHash = PasswordService.HashPassword("Birukdjn@8325"),
                     Role = "Admin",
                     Phone ="+251908574808",
                     CreatedAt = DateTime.UtcNow
@@ -117,7 +118,7 @@ namespace Backend.data
                 {
                     Username = "user",
                     Email = "user@example.com",
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("user123"),
+                    PasswordHash = PasswordService.HashPassword("user123"),
                     Role = "User",
                     Phone ="+251777888325",
                     CreatedAt = DateTime.UtcNow

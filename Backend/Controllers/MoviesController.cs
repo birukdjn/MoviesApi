@@ -1,6 +1,6 @@
-﻿using Backend.data;
-using Backend.DTOs;
-using Backend.models;
+﻿using Backend.Data;
+using Backend.DTOs.Movies;
+using Backend.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;

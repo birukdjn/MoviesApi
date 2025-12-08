@@ -11,11 +11,5 @@
         public const decimal StandardYearly = 5000m;
         public const decimal PremiumYearly = 8000m;
     }
-
-    public enum BillingPeriod
-    {
-        Monthly,
-        Yearly
-    }
 }
  

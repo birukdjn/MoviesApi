@@ -1,4 +1,4 @@
-﻿namespace Backend.models
+﻿namespace Backend.Models
 {
     public class Message(List<string> to, string subject, string content)
     {

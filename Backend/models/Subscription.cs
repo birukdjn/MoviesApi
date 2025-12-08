@@ -1,23 +1,9 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Backend.Enums;
 
-namespace Backend.models
+namespace Backend.Models
 {
-
-    public enum SubscriptionPlan
-    {
-        Basic,
-        Standard,
-        Premium
-    }
-
-    public enum SubscriptionStatus
-    {
-        Pending,
-        Active,
-        Cancelled,
-        Expired
-    }
 
     public class Subscription
     {

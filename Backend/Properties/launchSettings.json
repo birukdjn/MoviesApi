@@ -13,6 +13,7 @@
     "https": {
       "commandName": "Project",
       "launchBrowser": true,
+      "hotReloadEnabled": true,
       "launchUrl": "swagger",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"

@@ -1,7 +1,8 @@
 ﻿using Backend.Attributes;
 using Backend.Configuration;
-using Backend.data;
-using Backend.Services;
+using Backend.Data;
+using Backend.Services.Implementations;
+using Backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -16,30 +17,38 @@ var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 var services = builder.Services;
 
+// =========================================================================
+// 1. Service Registration (Configuration)
+// =========================================================================
+
+// Email Configuration and Service
 var emailConfig = configuration
     .GetSection("EmailConfiguration")
     .Get<EmailConfiguration>();
-
 
 if (emailConfig is not null)
 {
     services.AddSingleton(emailConfig);
 }
-
 services.AddScoped<IEmailSender, EmailSender>();
 
+// Third-Party Service Clients
 services.AddHttpClient<ChapaService>();
 
-builder.Services.Configure<TwilioSettings>(
-    builder.Configuration.GetSection("Twilio"));
+// Program.cs
+services.AddScoped<IPasswordService, PasswordService>();
+services.AddScoped<IJwtService, JwtService>();
 
-// 2. Register the SMS service
+// Twilio Configuration and Service
+services.Configure<TwilioSettings>(
+    configuration.GetSection("Twilio"));
 services.AddScoped<ISmsService, SmsService>();
 
+// Database Context (EF Core)
 services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
 
-
+// MVC/API Controllers configuration
 services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -48,38 +57,9 @@ services.AddControllers()
     });
 services.AddEndpointsApiExplorer();
 
-services.AddScoped<IJwtService, JwtService>();
+services.AddScoped<RequireSubscriptionAttribute>();
 
-services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc("v1", new OpenApiInfo { Title = "MoviesStore", Version = "v1" });
-
-    options.AddSecurityDefinition("bearer", new OpenApiSecurityScheme
-    {
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        Description = "JWT Authorization header using the Bearer scheme."
-    });
-    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
-    {
-        [new OpenApiSecuritySchemeReference("bearer", document)] = []
-    });
-
-
-
-});
-
-services.AddCors(options =>
-{
-    options.AddPolicy("allowedDomains", policy =>
-    {
-        policy.WithOrigins("http://localhost:3000", "http://192.168.100.167:3000").
-                AllowAnyHeader().
-                AllowAnyMethod().
-                AllowCredentials();
-    });
-});
+// Authentication & Performance Middleware Services
 
 services.AddResponseCompression();
 services.AddResponseCaching();
@@ -101,23 +81,23 @@ var jwtSection = configuration.GetSection("Jwt");
 var key = Encoding.UTF8.GetBytes(jwtSection.GetValue<string>("Key")!);
 
 services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+}).AddJwtBearer(options =>
+{
+    options.RequireHttpsMetadata = false; 
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
     {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    }).AddJwtBearer(options =>
-    {
-        options.RequireHttpsMetadata = false;
-        options.SaveToken = true;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSection["Issuer"],
-            ValidAudience = jwtSection["Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey((key))
-        };
-    });
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtSection["Issuer"],
+        ValidAudience = jwtSection["Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(key)
+    };
+});
 
 
 services.AddAuthorizationBuilder()
@@ -130,40 +110,76 @@ services.AddAuthorizationBuilder()
             });
         });
 
-builder.Services.AddScoped<RequireSubscriptionAttribute>();
+
+services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "MoviesStore", Version = "v1" });
+
+    options.AddSecurityDefinition("bearer", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "JWT Authorization header using the Bearer scheme."
+    });
+
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+
+    {
+
+        [new OpenApiSecuritySchemeReference("bearer", document)] = []
+    });
+});
 
 
+services.AddCors(options =>
+{
+    options.AddPolicy("allowedDomains", policy =>
+    {
+        // For production, list specific origins and ensure AllowCredentials is set if needed
+        policy.WithOrigins("http://localhost:3000", "http://192.168.100.167:3000")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
+// Stripe Configuration (Payment)
 var stripeSection = configuration.GetSection("Stripe");
 StripeConfiguration.ApiKey = stripeSection.GetValue<string>("SecretKey");
-
-
-
 
 var app = builder.Build();
 
 
-//----------------------------middleware pipeline configuration----------------------------//
+// =========================================================================
+// 2. Middleware Pipeline Configuration (Order is Critical)
+// =========================================================================
 
+app.UseForwardedHeaders();
 
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
+
+    // Swagger/SwaggerUI is typically enabled only in development/staging
     app.UseSwagger(options =>
     {
         options.OpenApiVersion = OpenApiSpecVersion.OpenApi3_1;
     });
     app.UseSwaggerUI(options =>
     {
-        options.SwaggerEndpoint("v1/swagger.json", "MoviesStore V1");
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "MoviesStore V1");
     });
 
+    // Development-only: Run database seeding
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    DbSeeder.Seed(db);
+    var passwordService = scope.ServiceProvider.GetRequiredService<IPasswordService>();
+    DbSeeder.Seed(db, passwordService);
 }
-
 else
 {
+    // Production Exception Handling
     app.UseExceptionHandler(errApp =>
     {
         errApp.Run(async context =>
@@ -172,18 +188,24 @@ else
             context.Response.ContentType = "application/json";
             var errorFeature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
             var exception = errorFeature?.Error;
-            var result = System.Text.Json.JsonSerializer.Serialize(new { message = "An internal server error occured" });
+            var result = System.Text.Json.JsonSerializer.Serialize(new { message = "An internal server error occurred." });
             await context.Response.WriteAsync(result);
         });
     });
+
+    // Enforce HTTPS
+    app.UseHttpsRedirection();
+    app.UseHsts();
 }
-app.UseHttpsRedirection();
-app.UseResponseCompression();
+
+app.UseStaticFiles();
+app.UseCookiePolicy();
 app.UseRouting();
+app.UseCors("allowedDomains"); 
+app.UseRateLimiter();
 
-app.UseCors("allowedDomains");
-
-
+app.UseAuthentication();
+app.UseAuthorization();
 
 var supportedCultures = new[] { new CultureInfo("en-US"), new CultureInfo("fr-FR"), new CultureInfo("es-ES"), new CultureInfo("de-DE"), new CultureInfo("it-IT") };
 var localizationOptions = new RequestLocalizationOptions()
@@ -194,12 +216,10 @@ var localizationOptions = new RequestLocalizationOptions()
 app.UseRequestLocalization(localizationOptions);
 
 app.UseResponseCaching();
-app.UseRateLimiter();
-
-app.UseAuthentication();
-app.UseAuthorization();
-
+app.UseResponseCompression();
 
 app.MapControllers();
+
+
 
 app.Run();

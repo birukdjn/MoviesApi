@@ -1,8 +1,8 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Backend.data;
-using Backend.models;
+using Backend.Data;
+using Backend.Models;
 
 namespace Backend.Controllers
 {

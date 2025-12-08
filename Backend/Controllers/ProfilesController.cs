@@ -1,11 +1,11 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Backend.data;
-using Backend.models;
-using Backend.DTOs;
-using Backend.Services;
+using Backend.Data;
+using Backend.Models;
 using System.Security.Claims;
+using Backend.Services.Interfaces;
+using Backend.DTOs.Profiles;
 
 namespace Backend.Controllers
 {
