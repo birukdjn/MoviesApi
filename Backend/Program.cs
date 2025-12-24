@@ -3,52 +3,35 @@ using Backend.Configuration;
 using Backend.Data;
 using Backend.Services.Implementations;
 using Backend.Services.Interfaces;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
-using Stripe;
 using System.Globalization;
 using System.Text;
 using System.Threading.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using Stripe;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 var services = builder.Services;
 
-// =========================================================================
-// 1. Service Registration (Configuration)
-// =========================================================================
-
-// Email Configuration and Service
-var emailConfig = configuration
-    .GetSection("EmailConfiguration")
-    .Get<EmailConfiguration>();
+var emailConfig = configuration.GetSection("EmailConfiguration").Get<EmailConfiguration>();
 
 if (emailConfig is not null)
 {
     services.AddSingleton(emailConfig);
 }
 services.AddScoped<IEmailSender, EmailSender>();
-
-// Third-Party Service Clients
 services.AddHttpClient<ChapaService>();
-
-// Program.cs
 services.AddScoped<IPasswordService, PasswordService>();
 services.AddScoped<IJwtService, JwtService>();
-
-// Twilio Configuration and Service
 services.Configure<TwilioSettings>(
     configuration.GetSection("Twilio"));
 services.AddScoped<ISmsService, SmsService>();
-
-// Database Context (EF Core)
 services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
-
-// MVC/API Controllers configuration
 services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -56,15 +39,10 @@ services.AddControllers()
             System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 services.AddEndpointsApiExplorer();
-
 services.AddScoped<RequireSubscriptionAttribute>();
-
-// Authentication & Performance Middleware Services
-
 services.AddResponseCompression();
 services.AddResponseCaching();
 services.AddLocalization();
-
 services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("fixed", config =>
@@ -86,7 +64,7 @@ services.AddAuthentication(options =>
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 }).AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false; 
+    options.RequireHttpsMetadata = false;
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
@@ -201,7 +179,7 @@ else
 app.UseStaticFiles();
 app.UseCookiePolicy();
 app.UseRouting();
-app.UseCors("allowedDomains"); 
+app.UseCors("allowedDomains");
 app.UseRateLimiter();
 
 app.UseAuthentication();

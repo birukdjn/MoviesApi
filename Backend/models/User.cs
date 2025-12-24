@@ -24,6 +24,10 @@
         public string? PasswordResetToken { get; set; }
         public DateTime? PasswordResetTokenExpiry { get; set; }
 
+        public string? EmailVerificationToken { get; set; }
+        public DateTime? EmailVerificationTokenExpiry { get; set; }
+        public bool IsEmailVerified { get; set; } = false;
+
 
 
 

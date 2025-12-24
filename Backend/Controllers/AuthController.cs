@@ -5,19 +5,20 @@ using Backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using System.Security.Claims;
 
 namespace Backend.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class AuthController(AppDbContext context, IJwtService jwt, IEmailSender emailSender, ISmsService smsService, IPasswordService passwordService) : ControllerBase
+    public class AuthController(AppDbContext context, IJwtService jwt, IEmailSender emailSender,IPasswordService passwordService, IConfiguration configuration) : ControllerBase
     {
         private readonly AppDbContext _context = context;
         private readonly IJwtService _jwt = jwt;
         private readonly IEmailSender _emailSender = emailSender;
-        private readonly ISmsService _smsService = smsService;
         private readonly IPasswordService _passwordService = passwordService;
+        private readonly IConfiguration _configuration = configuration;
 
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] UserRegisterDto dto)
@@ -27,6 +28,9 @@ namespace Backend.Controllers
 
             string passwordHash = _passwordService.HashPassword(dto.Password);
 
+            string verificationToken = Guid.NewGuid().ToString("N");
+            DateTime verificationExpiry = DateTime.UtcNow.AddDays(1);
+
             var user = new User
             {
                 Username = dto.Username,
@@ -35,6 +39,9 @@ namespace Backend.Controllers
                 Avatar = dto.Avatar ??  "default_avatar.png",
                 Role = "User",
                 Phone = dto.Phone,
+                IsEmailVerified = false,
+                EmailVerificationToken = verificationToken,
+                EmailVerificationTokenExpiry = verificationExpiry
             };
 
             _context.Users.Add(user);
@@ -52,56 +59,42 @@ namespace Backend.Controllers
             await _context.SaveChangesAsync();
 
             
-            var userToken = _jwt.GenerateUserToken(user);
-            defaultProfile.User = user;
-            var profileToken = _jwt.GenerateProfileToken(defaultProfile);
-            var refreshToken = _jwt.GenerateRefreshToken();
 
-            user.RefreshToken = refreshToken;
-            user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(7);
+           
             await _context.SaveChangesAsync();
+
+            
+            var frontendBaseUrl = _configuration.GetValue<string>("App:FrontendBaseUrl") ?? "http://192.168.100.167:3000";
+
+            var verificationLink = $"{frontendBaseUrl}/verify-email?token={verificationToken}";
 
             try
             {
-                var welcomeMessage = new Message(
+                var verificationMessage = new Message(
                     [user.Email],
-                    "Welcome to Our Streaming Service!",
-                    $"<h1>Hello {user.Username},</h1><p>Thank you for registering! You can now log in and start watching on your default profile.</p><p>If you have any questions, feel free to contact us.</p>"
+                    "Action Required: Verify Your Email Address",
+                    $"""
+                    <h1>Welcome to MoviesStore!</h1>
+                    <p>Thank you for registering. Please click the link below to verify your email address and activate your account:</p>
+                    <p><a href='{verificationLink}'>Verify My Email Address</a></p>
+                    <p>This link is valid for 24 hours.</p>
+                    """
 
                 );
 
-                // 🚀 Call the SendEmail method
-                _emailSender.SendEmail(welcomeMessage);
+                _emailSender.SendEmail(verificationMessage);
             }
             catch (Exception ex)
             {
-                // In a production application, you should log this error, 
-                // but registration success should NOT depend on email success.
-                Console.WriteLine($"Error sending welcome email to {user.Email}: {ex.Message}");
-            }
-
-            try // 💡 Wrap SMS in a try-catch as well
-            {
-                // 💡 FIX 3: CS0103 resolved by using the new _smsService field
-                string phone = dto.Phone; // Assuming you added Phone property to UserRegisterDto
-                string message = $"Welcome to MoviesStore! Your account has been successfully registered.";
-
-                await _smsService.SendSmsAsync(phone, message);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error sending SMS to {user.Phone}: {ex.Message}");
+                Console.WriteLine($"Error sending verification email to {user.Email}: {ex.Message}");
             }
 
 
             return Ok(new
             {
-                message = "User registered and default profile created successfully.",
+                message = "User registered successfully. **Please check your email to verify your account and activate login.**",
                 userId = user.Id,
                 username = user.Username,
-                userToken,
-                profileToken,
-                refreshToken,
                 defaultProfile = new
                 {
                     id = defaultProfile.Id,
@@ -109,7 +102,56 @@ namespace Backend.Controllers
                     defaultProfile.Avatar,
                 }
             });
-        }       
+        }
+
+        [HttpPost("verify-email")]
+        [AllowAnonymous]
+        public async Task<IActionResult> VerifyEmail([FromBody] EmailVerificationDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Token))
+            {
+                return BadRequest( new { message = "Verification token is required." });
+            }
+            var user = await _context.Users.FirstOrDefaultAsync(u=> u.EmailVerificationToken == dto.Token);
+            
+            if (user == null || user.EmailVerificationTokenExpiry < DateTime.UtcNow)
+            {
+                return BadRequest( new { message = "Invalid or expired verification token." });
+            }
+
+            if (user.IsEmailVerified)
+            {
+                return BadRequest(new { message = "Email is already verified. You can now log in." });
+            }
+            user.IsEmailVerified = true;
+            user.EmailVerificationToken = null;
+            user.EmailVerificationTokenExpiry = null;
+
+            var userToken = _jwt.GenerateUserToken(user);
+            var refreshToken = _jwt.GenerateRefreshToken();
+
+            var defaultProfile = await _context.Profiles
+                .Include(p => p.User)
+                .FirstOrDefaultAsync(p => p.UserId == user.Id);
+
+            if (defaultProfile == null)
+            {
+                return StatusCode(500, new { message = "Verification successful but profile data is missing." });
+            }
+            var profileToken = _jwt.GenerateProfileToken(defaultProfile);
+            user.RefreshToken = refreshToken;
+            user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(7);
+
+            await _context.SaveChangesAsync();
+
+            return Ok( new { 
+                message = "Email verified successfully. You can now log in.",
+                userToken,        
+                profileToken,     
+                refreshToken
+
+            });
+        }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] UserLoginDto dto)
@@ -120,7 +162,12 @@ namespace Backend.Controllers
             if (user == null || !_passwordService.VerifyPassword(dto.Password, user.PasswordHash))
                 return Unauthorized(new { message = "Invalid credentials" });
 
- 
+            if (!user.IsEmailVerified)
+            {
+                return Unauthorized(new { message = "Your email address has not been verified. Please check your inbox for the verification link." });
+            }
+
+
             var currentIp = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
                             ?? HttpContext.Connection.RemoteIpAddress?.ToString();
 
