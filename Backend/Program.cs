@@ -109,12 +109,10 @@ services.AddSwaggerGen(options =>
     });
 });
 
-
 services.AddCors(options =>
 {
     options.AddPolicy("allowedDomains", policy =>
     {
-        // For production, list specific origins and ensure AllowCredentials is set if needed
         policy.WithOrigins("http://localhost:3000", "http://192.168.100.167:3000")
             .AllowAnyHeader()
             .AllowAnyMethod()

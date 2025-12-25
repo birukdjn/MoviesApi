@@ -27,7 +27,9 @@ namespace Backend.Data
                     PasswordHash = PasswordService.HashPassword("Birukdjn@8325"),
                     Role = "Admin",
                     Phone ="+251908574808",
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    IsEmailVerified = true,
+                    IsSubscribed = true,
                 };
                 context.Users.Add(admin);
                 context.SaveChanges();
@@ -121,7 +123,10 @@ namespace Backend.Data
                     PasswordHash = PasswordService.HashPassword("user123"),
                     Role = "User",
                     Phone ="+251777888325",
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    IsEmailVerified = true,
+                    IsSubscribed = true,
+
                 };
                 context.Users.Add(basicUser);
                 context.SaveChanges();

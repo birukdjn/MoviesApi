@@ -1,10 +1,12 @@
 ﻿using Backend.Data;
+using Backend.DTOs.Admin;
 using Backend.DTOs.Users;
 using Backend.Models;
 using Backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
 
 namespace Backend.Controllers
 {
@@ -18,63 +20,42 @@ namespace Backend.Controllers
         private readonly IEmailSender _emailSender = emailSender;
 
         [HttpGet("stats")]
-        public async Task<IActionResult> GetStats()
+        [ProducesResponseType(typeof(AdminStatsDto),200)]
+        public async Task<ActionResult<AdminStatsDto>> GetStats()
         {
-            var totalUsers = await _context.Users.CountAsync();
-            var activeUsers = await _context.Users.CountAsync(u => u.IsActive);
-            var totalProfiles = await _context.Profiles.CountAsync();
-            var totalMovies = await _context.Movies.CountAsync();
-            var totalCategories = await _context.Categories.CountAsync();
-            var totalGenres = await _context.Genres.CountAsync();
-            var totalFavorites = await _context.Favorites.CountAsync();
-            var totalRatings = await _context.Ratings.CountAsync();
-            var averageRating = await _context.Ratings.AverageAsync(r => (double?)r.Score) ?? 0;
-            var totalPlaybackPositions = await _context.PlaybackPositions.CountAsync();
-            var totalSubscriptions = await _context.Subscriptions.CountAsync();
-
-            // Fix for IsActive
-            var activeSubscriptions = await _context.Subscriptions
-                .CountAsync(s => s.EndDate == null || s.EndDate > DateTime.UtcNow);
-
-            var planDistribution = await _context.Subscriptions
-                .GroupBy(s => s.Plan)
-                .Select(g => new { Plan = g.Key.ToString(), Count = g.Count() })
-                .ToListAsync();
-
-            var stats = new
-            {
-                users = new
+            var stats = await _context.Users
+                .Select(stat => new AdminStatsDto
                 {
-                    totalUsers,
-                    activeUsers,
-                    totalProfiles
-                },
-                content = new
-                {
-                    totalMovies,
-                    totalCategories,
-                    totalGenres
-                },
-                engagement = new
-                {
-                    totalFavorites,
-                    totalRatings,
-                    averageRating,
-                    totalPlaybackPositions
-                },
-                subscriptions = new
-                {
-                    totalSubscriptions,
-                    activeSubscriptions,
-                    planDistribution
-                }
-            };
-
+                    Users = new UserStats
+                    {
+                        TotalUsers = _context.Users.Count(),
+                        ActiveUsers = _context.Users.Count(u => u.IsActive),
+                        TotalProfiles = _context.Profiles.Count()
+                    },
+                    Content = new ContentStats
+                    {
+                        TotalMovies = _context.Movies.Count(),
+                        TotalCategories = _context.Categories.Count(),
+                        TotalGenres = _context.Genres.Count()
+                    },
+                    Engagement = new EngagementStats
+                    {
+                        TotalFavorites = _context.Favorites.Count(),
+                        TotalRatings = _context.Ratings.Count(),
+                        AverageRating = _context.Ratings.Average(r => (double?)r.Score) ?? 0
+                    },
+                    Subscriptions = new SubscriptionStats
+                    {
+                        TotalSubscriptions = _context.Subscriptions.Count()
+                    }
+                }).FirstOrDefaultAsync() ?? new AdminStatsDto();
             return Ok(stats);
         }
+
+
         [HttpGet("users")]
-        [AllowAnonymous]
-        public async Task<IActionResult> GetAllUsers()
+        [ProducesResponseType(typeof(object), 200)]
+        public async Task<ActionResult<IEnumerable<object>>> GetAllUsers()
         {
             var users = await _context.Users
                 .Select(u => new
@@ -90,60 +71,51 @@ namespace Backend.Controllers
                     u.IsSubscribed,
                     u.LastLoginIp,
                     u.Avatar,
-
                     u.Profiles,
                     u.Subscriptions
-                })
-                .ToListAsync();
+                }).ToListAsync();
             return Ok(users);
-
-
         }
 
-        private string GenerateRandomPassword(int length = 12)
+        private static string GenerateRandomPassword(int length = 12)
         {
-            const string validChars = "ABCDEFGHJKLMNOPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789!@$?_-";
-            var random = new Random();
-            var password = new char[length];
-
-            for (int i = 0; i < length; i++)
-            {
-                password[i] = validChars[random.Next(validChars.Length)];
-            }
-            return new string(password);
+            return Convert.ToBase64String(RandomNumberGenerator.GetBytes(length));
         }
+
 
         [HttpPost("create-admin")]
-        [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> CreateUserByAdmin([FromBody] UserCreateByAdminDto dto)
+        [ProducesResponseType(typeof(object), 201)]
+        [ProducesResponseType(typeof(object), 400)]
+        public async Task<ActionResult<object>> CreateUserByAdmin([FromBody] UserCreateByAdminDto dto)
         {
-            if (await _context.Users.AnyAsync(u => u.Username == dto.Username || u.Email == dto.Email))
-                return BadRequest("Username or Email already exists.");
+            if (await _context.Users.AnyAsync(u => u.Username == dto.Username))
+                return BadRequest("Username already exists.");
+
+            if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
+                return BadRequest("Email already exists.");
 
             // 1. Generate Temporary Password
             string tempPassword = GenerateRandomPassword();
             string passwordHash = _passwordService.HashPassword(tempPassword);
 
-            // 2. Create User Record
+            // 2. Create Admin Record
             var user = new User
             {
                 Username = dto.Username,
                 Email = dto.Email,
                 Phone = dto.Phone ?? string.Empty,
                 PasswordHash = passwordHash,
-                Role = "Admin",
-                Avatar = "default_avatar.png"
-
+                Role = "Admin"
 
             };
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
-
-            // 4. Send Email with Temporary Password
+            using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+                
                 var emailBody = $"<h3>Account Created Successfully!</h3>" +
                                 $"<p>An administrator has created an account for you with the following details:</p>" +
                                 $"<ul>" +
@@ -159,23 +131,23 @@ namespace Backend.Controllers
                 );
 
                 _emailSender.SendEmail(message);
+
+                await transaction.CommitAsync();
+                return CreatedAtAction(nameof(GetAllUsers), new { id = user.Id }, new
+                {
+                    user.Id,
+                    user.Username,
+                    user.Email,
+                    Message = "User created and credentials sent."
+                });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"Error sending temporary password email to {user.Email}: {ex.Message}");
+                await transaction.RollbackAsync();
+                return StatusCode(500, "Error Creating User or Sending Email. Please try again");
 
             }
-
-            return Ok(new
-            {
-                message = $"User {user.Username} created and temporary password sent to {user.Email}.",
-                userId = user.Id,
-                username = user.Username,
-                role = user.Role
-
-            });
         }
 
     }
 }
-
