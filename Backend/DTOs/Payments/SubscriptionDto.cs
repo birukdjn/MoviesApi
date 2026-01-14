@@ -8,6 +8,7 @@ namespace Backend.DTOs.Payments
         public int Id { get; set; }
         public required int UserId { get; set; }
         public string Plan { get; set; } = string.Empty;
+        public decimal Price { get; set; }
         public string Status { get; set; } = string.Empty;
         public string TxRef { get; set; } = string.Empty;
         public DateTime StartDate { get; set; }

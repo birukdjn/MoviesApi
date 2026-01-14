@@ -103,11 +103,7 @@ namespace Backend.Data
                 .HasForeignKey(pp => pp.MovieId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<PaymentTransaction>()
-                .Property(t => t.Amount)
-                .HasColumnType("decimal(18, 4)") 
-                .HasPrecision(18, 4);
-
+            
             base.OnModelCreating(modelBuilder);
         }
     }

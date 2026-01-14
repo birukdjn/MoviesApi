@@ -10,7 +10,6 @@ public class MoviePublicDto
     public string ThumbnailUrl { get; set; } = string.Empty;
     public string BackdropUrl { get; set; } = string.Empty;
     public string VideoUrl { get; set; } = string.Empty;
-    public string YoutubeId { get; set; } = string.Empty;
     public string AgeRating { get; set; } = string.Empty;
     public bool IsOriginal { get; set; }
     public double AverageRating { get; set; }

@@ -1,6 +1,7 @@
 ﻿using Backend.Data;
 using Backend.DTOs.Admin;
 using Backend.DTOs.Users;
+using Backend.Enums;
 using Backend.Models;
 using Backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -13,86 +14,117 @@ namespace Backend.Controllers
     [ApiController]
     [Route("api/admin")]
     [Authorize(Roles = "Admin")]
-    public class AdminController(AppDbContext context, IPasswordService  passwordService, IEmailSender emailSender) : ControllerBase
+    public class AdminController(AppDbContext context, IPasswordService  passwordService, IEmailSender emailSender, ILogger<AdminController> logger) : ControllerBase
     {
         private readonly AppDbContext _context = context;
         private readonly IPasswordService _passwordService = passwordService;
         private readonly IEmailSender _emailSender = emailSender;
+        private readonly ILogger<AdminController> _logger = logger;
 
         [HttpGet("stats")]
-        [ProducesResponseType(typeof(AdminStatsDto),200)]
+        [ProducesResponseType(typeof(AdminStatsDto), 200)]
+        [ProducesResponseType(typeof(object), 401)]
+        [ProducesResponseType(typeof(object), 403)]
+        [ProducesResponseType(typeof(object), 500)]
         public async Task<ActionResult<AdminStatsDto>> GetStats()
         {
-            var stats = await _context.Users
-                .Select(stat => new AdminStatsDto
+            // 1. Get User and Profile stats in ONE trip
+            var userStats = await _context.Users
+                .GroupBy(_ => 1)
+                .Select(g => new
                 {
-                    Users = new UserStats
-                    {
-                        TotalUsers = _context.Users.Count(),
-                        ActiveUsers = _context.Users.Count(u => u.IsActive),
-                        TotalProfiles = _context.Profiles.Count()
-                    },
-                    Content = new ContentStats
-                    {
-                        TotalMovies = _context.Movies.Count(),
-                        TotalCategories = _context.Categories.Count(),
-                        TotalGenres = _context.Genres.Count()
-                    },
-                    Engagement = new EngagementStats
-                    {
-                        TotalFavorites = _context.Favorites.Count(),
-                        TotalRatings = _context.Ratings.Count(),
-                        AverageRating = _context.Ratings.Average(r => (double?)r.Score) ?? 0
-                    },
-                    Subscriptions = new SubscriptionStats
-                    {
-                        TotalSubscriptions = _context.Subscriptions.Count()
-                    }
-                }).FirstOrDefaultAsync() ?? new AdminStatsDto();
-            return Ok(stats);
-        }
+                    Total = g.Count(),
+                    Active = g.Count(u => u.IsActive)
+                    
+                }).FirstOrDefaultAsync() ?? new { Total = 0, Active = 0 };
+            var totalProfiles = await _context.Profiles.CountAsync();
 
+            var contentStats = await _context.Movies
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    Movies = g.Count(m => m.MovieCategories.Any(c => c.Category.Name == "Movie")),
+                    Series = g.Count(m => m.MovieCategories.Any(c => c.Category.Name == "Series")),
+                    Episodes = g.Count(m => m.MovieCategories.Any(c => c.Category.Name == "Episode")),
+                    Languages = g.Select(m => m.Language).Distinct().Count(),
+                    Directors = g.Select(m => m.Director).Distinct().Count()
+                }).FirstOrDefaultAsync() ?? new { Movies = 0, Series = 0, Episodes = 0, Languages = 0, Directors = 0 };
+
+            var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
+            var subStats = await _context.Subscriptions
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    TotalSubs = g.Count(),
+                    BasicCount = g.Count(s => s.Plan == SubscriptionPlan.Basic),
+                    StandardCount = g.Count(s => s.Plan == SubscriptionPlan.Standard),
+                    PremiumCount = g.Count(s => s.Plan == SubscriptionPlan.Premium),
+                    TotalRev = g.Where(s => s.Status == SubscriptionStatus.Active).Sum(s => (decimal?)s.Price) ?? 0,
+                    MonthlyRev = g.Where(s => s.Status == SubscriptionStatus.Active && s.StartDate >= thirtyDaysAgo)
+                                  .Sum(s => (decimal?)s.Price) ?? 0
+                }).FirstOrDefaultAsync() ?? new { TotalSubs = 0, BasicCount = 0, StandardCount = 0, PremiumCount = 0, TotalRev = 0m, MonthlyRev = 0m };
+
+            return Ok(new AdminStatsDto
+            {
+                Users = new UserStats { TotalUsers = userStats.Total, ActiveUsers = userStats.Active, TotalProfiles = totalProfiles },
+                Content = new ContentStats { TotalMovies = contentStats.Movies, TotalSeries = contentStats.Series, TotalEpisodes = contentStats.Episodes /* ... */ },
+                Subscriptions = new SubscriptionStats { TotalSubscriptions = subStats.TotalSubs /* ... */ },
+                Revenue = new RevenueStats { TotalRevenue = subStats.TotalRev, MonthlyRevenue = subStats.MonthlyRev /* ... */ }
+            });
+        }
 
         [HttpGet("users")]
-        [ProducesResponseType(typeof(object), 200)]
-        public async Task<ActionResult<IEnumerable<object>>> GetAllUsers()
+        [ProducesResponseType(typeof(AdminUserViewDto), 200)]
+        [ProducesResponseType(typeof(object), 401)]
+        [ProducesResponseType(typeof(object), 403)]
+        [ProducesResponseType(typeof(object), 500)]
+        public async Task<ActionResult<IEnumerable<AdminUserViewDto>>> GetAllUsers()
         {
-            var users = await _context.Users
-                .Select(u => new
+            if (!await _context.Users.AnyAsync())
+                return Ok(new List<AdminUserViewDto>());
+
+
+            var Users = await _context.Users
+                .Select(u => new AdminUserViewDto
                 {
-                    u.Id,
-                    u.Username,
-                    u.Name,
-                    u.Email,
-                    u.Phone,
-                    u.Role,
-                    u.CreatedAt,
-                    u.IsActive,
-                    u.IsSubscribed,
-                    u.LastLoginIp,
-                    u.Avatar,
-                    u.Profiles,
-                    u.Subscriptions
+                    Id = u.Id,
+                    Username = u.Username,
+                    Name = u.Name,
+                    Email = u.Email,
+                    Phone = u.Phone,
+                    Role = u.Role,
+                    CreatedAt = u.CreatedAt,
+                    IsActive = u.IsActive,
+                    IsSubscribed = u.IsSubscribed,
+                    LastLoginIp = u.LastLoginIp,
+                    Avatar = u.Avatar,
+                    Profiles = string.Join(", ", u.Profiles.Select(p => p.Name))
                 }).ToListAsync();
-            return Ok(users);
+            return Ok(Users);
         }
 
-        private static string GenerateRandomPassword(int length = 12)
+       private static string GenerateRandomPassword(int length = 12)
         {
-            return Convert.ToBase64String(RandomNumberGenerator.GetBytes(length));
+            const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+            return new string(Enumerable
+                .Repeat(chars, length)
+                .Select(s => s[RandomNumberGenerator.GetInt32(s.Length)])
+                .ToArray());
         }
+
 
 
         [HttpPost("create-admin")]
-        [ProducesResponseType(typeof(object), 201)]
+        [ProducesResponseType(typeof(UserCreateByAdminDto), 201)]
         [ProducesResponseType(typeof(object), 400)]
+        [ProducesResponseType(typeof(object), 401)]
+        [ProducesResponseType(typeof(object), 403)]
+        [ProducesResponseType(typeof(object), 500)]
         public async Task<ActionResult<object>> CreateUserByAdmin([FromBody] UserCreateByAdminDto dto)
         {
-            if (await _context.Users.AnyAsync(u => u.Username == dto.Username))
-                return BadRequest("Username already exists.");
-
-            if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
-                return BadRequest("Email already exists.");
+            
+            if (await _context.Users.AnyAsync(u => u.Email == dto.Email || u.Username == dto.Username))
+                return BadRequest("Username or Email already exists.");
 
             // 1. Generate Temporary Password
             string tempPassword = GenerateRandomPassword();
@@ -105,7 +137,8 @@ namespace Backend.Controllers
                 Email = dto.Email,
                 Phone = dto.Phone ?? string.Empty,
                 PasswordHash = passwordHash,
-                Role = "Admin"
+                Role = "Admin",
+                MustChangePassword = true
 
             };
 
@@ -130,9 +163,23 @@ namespace Backend.Controllers
                     emailBody
                 );
 
-                _emailSender.SendEmail(message);
-
                 await transaction.CommitAsync();
+
+                try
+                {
+                    await _emailSender.SendEmailAsync(message);
+                    
+                }
+                catch (Exception ex)
+                {
+                    
+                    _logger.LogError(ex, $"Failed to send credentials email to user {user.Id} {user.Email}");
+
+
+                }
+
+
+
                 return CreatedAtAction(nameof(GetAllUsers), new { id = user.Id }, new
                 {
                     user.Id,

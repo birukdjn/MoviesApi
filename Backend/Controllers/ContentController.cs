@@ -13,12 +13,6 @@ namespace Backend.Controllers
     {
         private readonly AppDbContext _context = context;
 
-        private int GetCurrentProfileId()
-        {
-            var profileIdClaim = User.FindFirst("ProfileId")?.Value;
-            return int.Parse(profileIdClaim ?? "0");
-        }
-
         [HttpGet("{movieId}")]
         public async Task<ActionResult<MoviePublicDto>> GetMovieDetail(int movieId)
         {
@@ -37,9 +31,7 @@ namespace Backend.Controllers
                 ReleaseYear = movie.ReleaseYear,
                 RuntimeMinutes = movie.RuntimeMinutes,
                 ThumbnailUrl = movie.ThumbnailUrl,
-                BackdropUrl = movie.BackdropUrl,
                 VideoUrl = movie.VideoUrl,
-                YoutubeId = movie.YoutubeId,
                 AgeRating = movie.AgeRating,
                 AverageRating = movie.AverageRating,
                 IsOriginal = movie.IsOriginal,
@@ -68,9 +60,7 @@ namespace Backend.Controllers
                             ReleaseYear = mc.Movie.ReleaseYear,
                             RuntimeMinutes = mc.Movie.RuntimeMinutes,
                             ThumbnailUrl = mc.Movie.ThumbnailUrl,
-                            BackdropUrl = mc.Movie.BackdropUrl,
                             VideoUrl = mc.Movie.VideoUrl,
-                            YoutubeId = mc.Movie.YoutubeId,
                             AgeRating = mc.Movie.AgeRating,
                             IsOriginal = mc.Movie.IsOriginal,
                             AverageRating = mc.Movie.AverageRating,
@@ -106,9 +96,7 @@ namespace Backend.Controllers
                 ReleaseYear = m.ReleaseYear,
                 RuntimeMinutes = m.RuntimeMinutes,
                 ThumbnailUrl = m.ThumbnailUrl,
-                BackdropUrl = m.BackdropUrl,
                 VideoUrl = m.VideoUrl,
-                YoutubeId = m.YoutubeId,
                 AgeRating = m.AgeRating,
                 IsOriginal = m.IsOriginal,
                 AverageRating = m.AverageRating,

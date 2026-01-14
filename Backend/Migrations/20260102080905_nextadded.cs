@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Backend.Migrations
 {
     /// <inheritdoc />
-    public partial class initialMigrations : Migration
+    public partial class nextadded : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -44,16 +44,20 @@ namespace Backend.Migrations
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     Title = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Description = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     ReleaseYear = table.Column<int>(type: "int", nullable: false),
                     Director = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     RuntimeMinutes = table.Column<int>(type: "int", nullable: false),
-                    ThumbnailUrl = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    BackdropUrl = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    VideoUrl = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    YoutubeId = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Language = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     AgeRating = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     IsOriginal = table.Column<bool>(type: "bit", nullable: false),
+                    VideoUrl = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    ThumbnailUrl = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    BackdropUrl = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    SeriesId = table.Column<int>(type: "int", nullable: true),
+                    SeasonNumber = table.Column<int>(type: "int", nullable: true),
+                    EpisodeNumber = table.Column<int>(type: "int", nullable: true),
+                    Order = table.Column<int>(type: "int", nullable: false),
                     AverageRating = table.Column<double>(type: "float", nullable: false)
                 },
                 constraints: table =>
@@ -193,6 +197,7 @@ namespace Backend.Migrations
                     Id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     UserId = table.Column<int>(type: "int", nullable: false),
+                    Price = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
                     Plan = table.Column<int>(type: "int", nullable: false),
                     StartDate = table.Column<DateTime>(type: "datetime2", nullable: false),
                     EndDate = table.Column<DateTime>(type: "datetime2", nullable: true),
@@ -244,9 +249,9 @@ namespace Backend.Migrations
                         .Annotation("SqlServer:Identity", "1, 1"),
                     ProfileId = table.Column<int>(type: "int", nullable: false),
                     MovieId = table.Column<int>(type: "int", nullable: false),
-                    PositionInSeconds = table.Column<int>(type: "int", nullable: false),
-                    TotalDurationInSeconds = table.Column<int>(type: "int", nullable: false),
-                    LastWatchedDate = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    PositionSeconds = table.Column<double>(type: "float", nullable: false),
+                    DurationSeconds = table.Column<double>(type: "float", nullable: false),
+                    LastUpdated = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },
                 constraints: table =>
                 {

@@ -20,6 +20,17 @@ namespace Backend.Controllers
         private readonly IPasswordService _passwordService = passwordService;
         private readonly IConfiguration _configuration = configuration;
 
+
+        [HttpGet("check-email")]
+        [AllowAnonymous]
+        public async Task<IActionResult> CheckEmail([FromQuery] string email)
+        {
+            email = email.Trim().ToLower();
+            var exists = await _context.Users.AnyAsync(u => u.Email.ToLower() == email);
+            return Ok(new { exists });
+
+        }
+
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] UserRegisterDto dto)
         {
@@ -57,12 +68,6 @@ namespace Backend.Controllers
 
             _context.Profiles.Add(defaultProfile);
             await _context.SaveChangesAsync();
-
-            
-
-           
-            await _context.SaveChangesAsync();
-
             
             var frontendBaseUrl = _configuration.GetValue<string>("App:FrontendBaseUrl") ?? "http://192.168.100.167:3000";
 
@@ -82,7 +87,7 @@ namespace Backend.Controllers
 
                 );
 
-                _emailSender.SendEmail(verificationMessage);
+                await _emailSender.SendEmailAsync(verificationMessage);
             }
             catch (Exception ex)
             {
@@ -162,6 +167,16 @@ namespace Backend.Controllers
             if (user == null || !_passwordService.VerifyPassword(dto.Password, user.PasswordHash))
                 return Unauthorized(new { message = "Invalid credentials" });
 
+            if (user.MustChangePassword)
+            {
+                return StatusCode(403, new
+                {
+                    message = "Password change required",
+                    mustChangePassword = true
+                });
+            }
+
+
             if (!user.IsEmailVerified)
             {
                 return Unauthorized(new { message = "Your email address has not been verified. Please check your inbox for the verification link." });
@@ -185,7 +200,7 @@ namespace Backend.Controllers
                         """
                     );
 
-                    _emailSender.SendEmail(msg);
+                    await _emailSender.SendEmailAsync(msg);
                 }
                 catch (Exception ex)
                 {
@@ -278,7 +293,7 @@ namespace Backend.Controllers
                 if (string.IsNullOrEmpty(dto.CurrentPassword))
                     return BadRequest("Current password is required to change password.");
 
-                if (_passwordService.VerifyPassword(dto.CurrentPassword, user.PasswordHash))
+                if (!_passwordService.VerifyPassword(dto.CurrentPassword, user.PasswordHash))
                     return Unauthorized(new { message = "Incorrect current password." });
 
                 user.PasswordHash = _passwordService.HashPassword(dto.NewPassword);
@@ -295,7 +310,7 @@ namespace Backend.Controllers
         }
 
         [HttpPost("refresh")]
-        [AllowAnonymous]
+        [Authorize]
         public IActionResult Refresh([FromBody] RefreshRequest request)
         {
             var user = _context.Users.FirstOrDefault(u => u.RefreshToken == request.RefreshToken);
@@ -334,7 +349,7 @@ namespace Backend.Controllers
 
             await _context.SaveChangesAsync();
 
-            var resetLink = $"http://localhost:3000//reset-password?token={resetToken}";
+            var resetLink = $"http://localhost:3000/reset-password?token={resetToken}";
 
             // 3. Send Email
             try
@@ -350,7 +365,7 @@ namespace Backend.Controllers
                     emailBody
                 );
 
-                _emailSender.SendEmail(message);
+                await _emailSender.SendEmailAsync(message);
             }
             catch (Exception ex)
             {
@@ -382,6 +397,7 @@ namespace Backend.Controllers
 
             // 3. Hash and Update Password
             user.PasswordHash = _passwordService.HashPassword(dto.NewPassword);
+            user.MustChangePassword = false;
 
             // 4. Invalidate Token
             user.PasswordResetToken = null;

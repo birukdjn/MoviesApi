@@ -13,6 +13,7 @@
         public string? Avatar { get; set; }
         public string Role { get; set; } = "User";
         public bool IsActive { get; set; } = true;
+        public bool MustChangePassword { get; set; } = false;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public string? LastLoginIp { get; set; }
         public string? RefreshToken { get; set; }
@@ -27,9 +28,6 @@
         public string? EmailVerificationToken { get; set; }
         public DateTime? EmailVerificationTokenExpiry { get; set; }
         public bool IsEmailVerified { get; set; } = false;
-
-
-
 
         public ICollection<Subscription> Subscriptions { get; set; } = [];
         public ICollection<Profile> Profiles { get; set; } = [];

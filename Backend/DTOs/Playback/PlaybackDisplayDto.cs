@@ -5,10 +5,10 @@
         public int MovieId { get; set; }
         public string Title { get; set; } = string.Empty;
         public string ThumbnailUrl { get; set; } = string.Empty;
-        public int PositionInSeconds { get; set; }
-        public int TotalDurationInSeconds { get; set; }
+        public double PositionSeconds { get; set; }
+        public double DurationSeconds { get; set; }
         public double WatchPercentage =>
-            TotalDurationInSeconds > 0 ? (double)PositionInSeconds / TotalDurationInSeconds : 0;
-        public DateTime LastWatchedDate { get; set; }
+            DurationSeconds > 0 ? (double)PositionSeconds / DurationSeconds : 0;
+        public DateTime LastUpdated { get; set; }
     }
 }

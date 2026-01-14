@@ -11,25 +11,24 @@ namespace Backend.Services.Implementations
     {
         private readonly EmailConfiguration _emailConfig = emailConfig;
 
-        public void SendEmail(Message message)
+        public async Task SendEmailAsync(Message message)
         {
             var emailMessage = CreateEmailMessage(message);
 
             using var client = new SmtpClient();
             try
             {
-                client.Connect(_emailConfig.SmtpServer, _emailConfig.Port, SecureSocketOptions.StartTls);
-                client.Authenticate(_emailConfig.UserName, _emailConfig.Password);
-                client.Send(emailMessage);
+                await client.ConnectAsync(_emailConfig.SmtpServer, _emailConfig.Port, SecureSocketOptions.StartTls);
+                await client.AuthenticateAsync(_emailConfig.UserName, _emailConfig.Password);
+                await client.SendAsync(emailMessage);
             }
             catch
             {
-                // Log the exception here
                 throw;
             }
             finally
             {
-                client.Disconnect(true);
+                await client.DisconnectAsync(true);
             }
         }
 
@@ -37,7 +36,7 @@ namespace Backend.Services.Implementations
         {
             var emailMessage = new MimeMessage();
             emailMessage.From.Add(new MailboxAddress("Birukdjn", _emailConfig.From));
-            emailMessage.To.AddRange(message.To.Select(t => new MailboxAddress("", t)));
+            emailMessage.To.AddRange(message.To.Select(t => new MailboxAddress(string.Empty, t)));
             emailMessage.Subject = message.Subject;
             emailMessage.Body = new TextPart(MimeKit.Text.TextFormat.Html) { Text = message.Content };
 

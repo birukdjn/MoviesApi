@@ -1,134 +1,105 @@
-﻿using Backend.Data;
+﻿using Backend.Constants;
+using Backend.Data;
+using Backend.DTOs.Payments;
 using Backend.Enums;
 using Backend.Models;
 using Backend.Services.Implementations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Stripe;
 using System.Security.Claims;
+using System.Transactions;
 
 namespace Backend.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class PaymentsController(AppDbContext context, ChapaService chapa, IConfiguration config) : ControllerBase
-    {
-        private readonly AppDbContext _context = context;
-        private readonly ChapaService _chapa = chapa;
-        private readonly IConfiguration _config = config;
-
-        // ---------------------------------------------------------
-        // 1. START PAYMENT: Save the TxRef + UserId to Database
-        // ---------------------------------------------------------
-        [Authorize]
-        [HttpPost("create-chapa-session")]
-        public async Task<IActionResult> CreateChapaSession([FromQuery] decimal amount)
+    public class PaymentsController(AppDbContext context, ChapaService chapaService, IConfiguration config) : ControllerBase
+    {      
+        [HttpPost("initialize-payment")]
+        public async Task<ActionResult> Initialize([FromBody] CreateCheckoutDto dto)
         {
-            // FIX: Retrieve and validate User ID from JWT claims
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
-                return Unauthorized("Invalid user token or user ID.");
+            if (userIdClaim == null) return Unauthorized();
 
-            var user = await _context.Users.FindAsync(userId);
-            if (user == null) return NotFound("User not found.");
+            var userId = int.Parse(userIdClaim);
+            var price = SubscriptionPricing.GetPrice(dto.Plan);
+            var user = await context.Users.FindAsync(userId);
+            string FirstName = user.Name.Split(' ').FirstOrDefault() ?? user.Username;
+            string LastName = user.Name.Split(' ').Skip(1).FirstOrDefault() ?? user.Username;
+            string Email = user.Email;
+            string Phone = user.Phone;
 
-            var callbackUrl = _config["Chapa:CallbackUrl"];
 
-            if (string.IsNullOrEmpty(callbackUrl))
-            {
-                return StatusCode(500, "Payment configuration error: Callback URL is missing.");
-            }
+            var (checkoutUrl, txRef) = await chapaService.CreatePaymentAsync(
+                Email,
+                price,
+                config["Chapa:CallbackUrl"]!,
+                FirstName,
+                LastName,
+                Phone);
 
-            // FIX: Pass required user details to the Chapa service.
-            var firstName = user.Name.Split(' ').FirstOrDefault() ?? user.Username;
-            var lastName = user.Name.Split(' ').Skip(1).FirstOrDefault() ?? user.Username;
-
-            var (checkoutUrl, txRef) = await _chapa.CreatePaymentAsync(
-                user.Email,
-                amount,
-                callbackUrl,
-                firstName,
-                lastName,
-                user.Phone 
-            );
-
-            if (string.IsNullOrEmpty(checkoutUrl))
-                return StatusCode(500, "Failed to create payment session.");
+            if (checkoutUrl == null) return BadRequest("Could not initialize payment.");
 
             var transaction = new PaymentTransaction
             {
-                UserId = userId,
-                TxRef = txRef,
-                Amount = amount,
-                Status = "Pending",
+                UserId = userId,                               
+                Status = SubscriptionStatus.Pending.ToString(),
+                TxRef = txRef,   
+                Plan = (int)dto.Plan,
                 CreatedAt = DateTime.UtcNow
             };
 
-            _context.PaymentTransactions.Add(transaction);
-            await _context.SaveChangesAsync();
+            context.PaymentTransactions.Add(transaction);
+            await context.SaveChangesAsync();
 
-            return Ok(new { url = checkoutUrl });
+            return Ok(new { url = checkoutUrl  });
         }
 
-        // ---------------------------------------------------------
-        // 2. CALLBACK: Find the User using TxRef and Activate Subscription
-        // ---------------------------------------------------------
         [HttpGet("chapa-callback")]
         [AllowAnonymous]
-        public async Task<IActionResult> ChapaCallback([FromQuery] string tx_ref)
+        public async Task<IActionResult> ChapaCallback( [FromQuery] string trx_ref)
         {
-            if (string.IsNullOrEmpty(tx_ref))
-                return BadRequest("Transaction reference is required.");
+            
+            if (string.IsNullOrEmpty(trx_ref))
+                return BadRequest(new { message = "Transaction reference is required." });
 
-            bool isPaidAtChapa = await _chapa.VerifyPaymentAsync(tx_ref);
-            if (!isPaidAtChapa) return BadRequest("Payment verification failed at Chapa.");
+            // 1. Verify with Chapa API
+            var isPaidAtChapa = await chapaService.VerifyPaymentAsync(trx_ref);
+            if (!isPaidAtChapa) return BadRequest(new { message = "Payment verification failed at Chapa." });
 
-            var transaction = await _context.PaymentTransactions
-                .Include(t => t.User)
-                .FirstOrDefaultAsync(t => t.TxRef == tx_ref);
+            // 2. Find the pending subscription
+            var subscription = await context.Subscriptions
+                .Include(s => s.User)
+                .FirstOrDefaultAsync(s => s.TxRef == trx_ref);
 
-            if (transaction == null) return NotFound("Transaction record not found in local DB.");
+            if (subscription == null) return NotFound(new { message = "Subscription record not found." });
 
-            // 3. Prevent Double Processing (Idempotency)
-            if (transaction.Status == "Success")
+            // 3. If already active, just return success
+            if (subscription.Status == SubscriptionStatus.Active)
             {
-                // Already processed, just redirect
-                return Redirect("http://localhost:5173/success");
-            }
-           
-            // 4. Update Transaction Status
-            transaction.Status = "Success";
-
-            // 5. Activate User Subscription
-            var user = transaction.User;
-            if (user == null)
-            {
-                // This scenario indicates a major data integrity issue (transaction without a linked user)
-                return StatusCode(500, "Internal Error: Transaction is missing a linked user profile.");
+                return Ok(new { status = "success", message = "Subscription already active." });
             }
 
-            // Logic to calculate end date (1 month from now)
+            // 4. Activate Subscription and User
             var expiryDate = DateTime.UtcNow.AddMonths(1);
+            subscription.Status = SubscriptionStatus.Active;
+            subscription.StartDate = DateTime.UtcNow;
+            subscription.EndDate = expiryDate;
 
-            // Add Subscription Record
-            var subscription = new Subscription
+            if (subscription.User != null)
             {
-                UserId = user.Id,
-                Plan = SubscriptionPlan.Standard,
-                StartDate = DateTime.UtcNow,
-                EndDate = expiryDate
-            };
-            _context.Subscriptions.Add(subscription);
+                subscription.Status = SubscriptionStatus.Active;
+                subscription.User.IsSubscribed = true;
+                subscription.User.SubscriptionExpiresAt = expiryDate;
+            }
 
-            // Update User Profile
-            user.IsSubscribed = true;
-            user.SubscriptionExpiresAt = expiryDate;
+            await context.SaveChangesAsync();
 
-            // Save all changes in one transaction
-            await _context.SaveChangesAsync();
-
-            // 6. Redirect to Frontend
-            return Redirect("http://localhost:5173/success");
+            // 5. IMPORTANT: Return JSON, not a Redirect!
+            // Your React frontend is waiting for this response.
+            return Ok(new { status = "success", message = "Subscription activated successfully." });
         }
     }
 }

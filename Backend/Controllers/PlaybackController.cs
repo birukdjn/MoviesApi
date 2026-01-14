@@ -1,78 +1,39 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Backend.Data;
+﻿using Backend.DTOs.Playback;
 using Backend.Models;
-using Backend.DTOs.Playback;
+using Backend.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
-namespace Backend.Controllers
+[ApiController]
+[Route("api/[controller]")]
+[Authorize]
+public class PlaybackController(IMovieService movieService) : ControllerBase
 {
+    private int GetCurrentProfileId() =>
+        int.Parse(User.FindFirst("ProfileId")?.Value ?? "0");
 
-    [ApiController]
-    [Route("api/[controller]")]
-    public class PlaybackController(AppDbContext context) : ControllerBase
+    [HttpPost("update")]
+    public async Task<IActionResult> UpdatePosition([FromBody] PlaybackUpdateDto dto)
     {
-        private readonly AppDbContext _context = context;
+        await movieService.UpdatePlaybackPositionAsync(GetCurrentProfileId(), dto);
+        return NoContent();
+    }
 
-        private int GetCurrentProfileId()
+    [HttpGet("continue")]
+    public async Task<ActionResult<IEnumerable<PlaybackDisplayDto>>> GetContinueWatching()
+    {
+        var positions = await movieService.GetContinueWatchingAsync(GetCurrentProfileId());
+
+        var dtos = positions.Select(p => new PlaybackDisplayDto
         {
-            var profileIdClaim = User.FindFirst("ProfileId")?.Value;
-            return int.Parse(profileIdClaim ?? "0");
-        }
+            MovieId = p.MovieId,
+            Title = p.Movie.Title,
+            ThumbnailUrl = p.Movie.ThumbnailUrl,
+            PositionSeconds = p.PositionSeconds,
+            DurationSeconds = p.DurationSeconds,
+            LastUpdated = p.LastUpdated
+        });
 
-        [HttpPost("update")]
-        public async Task<IActionResult> UpdatePosition([FromBody] PlaybackUpdateDto dto)
-        {
-            int profileId = GetCurrentProfileId();
-
-            var position = await _context.PlaybackPositions
-                .FirstOrDefaultAsync(p => p.ProfileId == profileId && p.MovieId == dto.MovieId);
-
-            if (position == null)
-            {
-                position = new PlaybackPosition
-                {
-                    ProfileId = profileId,
-                    MovieId = dto.MovieId,
-                    TotalDurationInSeconds = dto.TotalDurationInSeconds
-                };
-                _context.PlaybackPositions.Add(position);
-            }
-
-            position.PositionInSeconds = dto.PositionInSeconds;
-            position.LastWatchedDate = DateTime.UtcNow;
-
-            if (dto.PositionInSeconds >= dto.TotalDurationInSeconds - 60)
-            {
-                _context.PlaybackPositions.Remove(position);
-            }
-
-            await _context.SaveChangesAsync();
-            return NoContent();
-        }
-
-        [HttpGet("continue")]
-        public async Task<ActionResult<IEnumerable<PlaybackDisplayDto>>> GetContinueWatchingList()
-        {
-            int profileId = GetCurrentProfileId();
-
-            var positions = await _context.PlaybackPositions
-                .Where(p => p.ProfileId == profileId)
-                .Include(p => p.Movie)
-                .OrderByDescending(p => p.LastWatchedDate)
-                .Take(10)
-                .ToListAsync();
-
-            var dtos = positions.Select(p => new PlaybackDisplayDto
-            {
-                MovieId = p.MovieId,
-                Title = p.Movie.Title,
-                ThumbnailUrl = p.Movie.ThumbnailUrl,
-                PositionInSeconds = p.PositionInSeconds,
-                TotalDurationInSeconds = p.TotalDurationInSeconds,
-                LastWatchedDate = p.LastWatchedDate
-            }).ToList();
-
-            return Ok(dtos);
-        }
+        return Ok(dtos);
     }
 }

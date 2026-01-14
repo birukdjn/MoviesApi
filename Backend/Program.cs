@@ -1,17 +1,18 @@
 ﻿using Backend.Attributes;
 using Backend.Configuration;
 using Backend.Data;
+using Backend.Middleware;
 using Backend.Services.Implementations;
 using Backend.Services.Interfaces;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
+using Stripe;
 using System.Globalization;
 using System.Text;
 using System.Threading.RateLimiting;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using Stripe;
-using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
@@ -23,6 +24,11 @@ if (emailConfig is not null)
 {
     services.AddSingleton(emailConfig);
 }
+
+services.AddScoped<IMovieService, MovieService>();
+
+
+
 services.AddScoped<IEmailSender, EmailSender>();
 services.AddHttpClient<ChapaService>();
 services.AddScoped<IPasswordService, PasswordService>();
@@ -125,7 +131,7 @@ var stripeSection = configuration.GetSection("Stripe");
 StripeConfiguration.ApiKey = stripeSection.GetValue<string>("SecretKey");
 
 var app = builder.Build();
-
+app.UseMiddleware<ExceptionMiddleware>();
 
 // =========================================================================
 // 2. Middleware Pipeline Configuration (Order is Critical)
