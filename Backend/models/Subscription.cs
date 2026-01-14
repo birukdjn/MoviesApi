@@ -14,6 +14,7 @@ namespace Backend.Models
         [ForeignKey("UserId")]
 
         public User User { get; set; } = null!;
+        public decimal Price { get; set; }
 
         public SubscriptionPlan Plan { get; set; } = SubscriptionPlan.Basic;
 
@@ -27,5 +28,6 @@ namespace Backend.Models
         [NotMapped]
         public bool IsActive => Status == SubscriptionStatus.Active
                          && (EndDate == null || EndDate > DateTime.UtcNow);
+        
     }
 }

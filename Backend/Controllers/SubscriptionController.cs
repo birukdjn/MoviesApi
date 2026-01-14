@@ -1,11 +1,12 @@
-﻿using Backend.Data;
+﻿using Backend.Constants;
+using Backend.Data;
 using Backend.DTOs.Payments;
+using Backend.Enums;
 using Backend.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using Backend.Enums;
 
 namespace Backend.Controllers
 {
@@ -75,9 +76,11 @@ namespace Backend.Controllers
             {
                 UserId = userId,
                 Plan = plan,
+                Price = SubscriptionPricing.GetPrice(plan),
                 StartDate = DateTime.UtcNow,
                 EndDate = endDate,
-                Status = SubscriptionStatus.Active
+                Status = SubscriptionStatus.Active,
+                TxRef = $"SUB-{Guid.NewGuid().ToString().Substring(0, 8).ToUpper()}"
             };
 
             _context.Subscriptions.Add(subscription);
@@ -94,6 +97,7 @@ namespace Backend.Controllers
                 Id = subscription.Id,
                 UserId = subscription.UserId,
                 Plan = subscription.Plan.ToString(),
+                Price = subscription.Price,
                 StartDate = subscription.StartDate,
                 EndDate = subscription.EndDate,
                 TxRef = subscription.TxRef,
@@ -103,6 +107,7 @@ namespace Backend.Controllers
 
             return Ok(subscriptionDto);
         }
+
 
         // -------------------------------------------------------------
         // 3. POST /cancel/{subscriptionId}: Cancel subscription

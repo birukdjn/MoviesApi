@@ -20,6 +20,15 @@ namespace Backend.Controllers
         private readonly IPasswordService _passwordService = passwordService;
         private readonly IConfiguration _configuration = configuration;
 
+
+        [HttpGet("check-email")]
+        [AllowAnonymous]
+        public async Task<IActionResult> CheckEmail([FromQuery] string email)
+        {
+            var exists = await _context.Users.AnyAsync(u => u.Email == email.ToLower());
+            return Ok(new { exists });
+        }
+
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] UserRegisterDto dto)
         {

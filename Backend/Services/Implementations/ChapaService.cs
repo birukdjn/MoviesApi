@@ -1,101 +1,66 @@
-﻿using System.Net.Http.Headers;
-using System.Text.Json;
-using Backend.Models;
-using Microsoft.Extensions.Configuration;
-using System;
-using System.Net.Http;
-using System.Threading.Tasks;
-using System.Net.Http.Json;
+﻿using Backend.DTOs.Payments;
+using Newtonsoft.Json;
+using System.Text;
 
 namespace Backend.Services.Implementations
 {
-    public class ChapaService
+    public class ChapaService(IConfiguration config, HttpClient httpClient)
     {
-        private readonly IConfiguration _config;
-        private readonly HttpClient _client;
+        private readonly string _secretKey = config["Chapa:SecretKey"]!;
 
-        // FIX: Constructor to handle Dependency Injection
-        public ChapaService(IConfiguration config, HttpClient client)
+        // This replaces "InitializePayment" to match your Controller's call
+      
+        public async Task<(string? CheckoutUrl, string TxRef)> CreatePaymentAsync(
+    string email, decimal amount, string callbackUrl, string firstName, string lastName, string? phone)
         {
-            _config = config;
-            _client = client;
+            var txRef = $"TX-{Guid.NewGuid().ToString()[..8].ToUpper()}";
 
-            _client.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", _config["Chapa:SecretKey"]);
-        }
+            httpClient.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _secretKey);
 
-        public async Task<(string? checkoutUrl, string txRef)> CreatePaymentAsync(
-            string email,
-            decimal amount,
-            string callbackUrl,
-            string firstName,
-            string lastName,
-            string phoneNumber)
-        {
-            var txRef = Guid.NewGuid().ToString();
-
-            var data = new
+            var payload = new
             {
-                email,
-                amount, // Fixed to send decimal amount directly
+                // Chapa expects a string or decimal, but specifically "currency" must be correct
+                amount = amount.ToString("0.00"),
                 currency = "ETB",
-                callback_url = callbackUrl,
+                email,
+                first_name = firstName,
+                last_name = lastName,
+                phone_number = phone ?? "0900000000", // Chapa sometimes requires a phone number
                 tx_ref = txRef,
-                first_name = firstName, // Required Chapa field
-                last_name = lastName,   // Required Chapa field
-                phone_number = phoneNumber, // Required Chapa field
-
-                customization = new
-                {
-                    title = "MoviesStore Subscription",
-                    description = $"1 Month of Standard Plan"
-                }
+                callback_url = callbackUrl,
+                // FIX: Redirect back to your Next.js Success page
+                return_url = "http://localhost:3000/payment-success",
             };
 
-            try
+            var content = new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json");
+            var response = await httpClient.PostAsync("https://api.chapa.co/v1/transaction/initialize", content);
+
+            if (!response.IsSuccessStatusCode)
             {
-                var response = await _client.PostAsJsonAsync("https://api.chapa.co/v1/transaction/initialize", data);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    // Log the detailed error message from Chapa's response content
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine($"Chapa API failed with status {response.StatusCode}. Details: {errorContent}");
-                    // Exception will be caught below, returning null
-                }
-
-                response.EnsureSuccessStatusCode();
-
-                var json = await response.Content.ReadAsStringAsync();
-                var doc = JsonDocument.Parse(json);
-
-                var url = doc.RootElement.GetProperty("data").GetProperty("checkout_url").GetString();
-                return (url, txRef);
-            }
-            catch (Exception ex)
-            {
-                // Log the exception detail
-                Console.WriteLine($"Chapa Payment Error: {ex.Message}");
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Chapa Error: {errorContent}"); // Check your console for this!
                 return (null, txRef);
             }
-        }
 
+            var jsonResponse = await response.Content.ReadAsStringAsync();
+            var chapaRes = JsonConvert.DeserializeObject<ChapaResponse>(jsonResponse);
+
+            return (chapaRes?.Data?.CheckoutUrl, txRef);
+        }
         public async Task<bool> VerifyPaymentAsync(string txRef)
         {
-            try
-            {
-                var response = await _client.GetAsync($"https://api.chapa.co/v1/transaction/verify/{txRef}");
-                response.EnsureSuccessStatusCode();
+            httpClient.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _secretKey);
 
-                var json = await response.Content.ReadAsStringAsync();
-                var doc = JsonDocument.Parse(json);
-                var status = doc.RootElement.GetProperty("data").GetProperty("status").GetString();
-                return status?.ToLower() == "success";
-            }
-            catch
-            {
-                return false;
-            }
+            var response = await httpClient.GetAsync($"https://api.chapa.co/v1/transaction/verify/{txRef}");
+
+            if (!response.IsSuccessStatusCode) return false;
+
+            var jsonResponse = await response.Content.ReadAsStringAsync();
+            dynamic result = JsonConvert.DeserializeObject(jsonResponse)!;
+
+            return result.status == "success";
         }
     }
 }

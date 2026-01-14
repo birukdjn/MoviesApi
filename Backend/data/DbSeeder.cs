@@ -119,7 +119,7 @@ namespace Backend.Data
                 var basicUser = new User
                 {
                     Username = "user",
-                    Email = "user@example.com",
+                    Email = "Birukdejene2000@gmail.com",
                     PasswordHash = PasswordService.HashPassword("user123"),
                     Role = "User",
                     Phone ="+251777888325",
@@ -170,9 +170,7 @@ namespace Backend.Data
                         RuntimeMinutes = 19,
                         AgeRating = "All Ages",
                         ThumbnailUrl = "",
-                        BackdropUrl = "",
                         VideoUrl = "https://www.youtube.com/watch?v=RKp3pjPHo64",
-                        YoutubeId = "RKp3pjPHo64",
                         IsOriginal = true,
                         MovieCategories = [new MovieCategory { CategoryId = moviesCategory.Id }],
                         MovieGenres =
@@ -191,9 +189,7 @@ namespace Backend.Data
                         RuntimeMinutes = 98,
                         AgeRating = "TV-PG",
                         ThumbnailUrl = "",
-                        BackdropUrl = "",
                         VideoUrl = "https://www.youtube.com/watch?v=T0Qk7fdzb_c",
-                        YoutubeId = "T0Qk7fdzb_c",
                         IsOriginal = false,
                         MovieCategories = [new MovieCategory { CategoryId = moviesCategory.Id }],
                         MovieGenres =
@@ -212,9 +208,7 @@ namespace Backend.Data
                         RuntimeMinutes = 55,
                         AgeRating = "TV-MA",
                         ThumbnailUrl = "",
-                        BackdropUrl = "",
                         VideoUrl = "https://www.youtube.com/watch?v=JfVOs4VSpmA",
-                        YoutubeId = "JfVOs4VSpmA",
                         IsOriginal = true,
                         MovieCategories = [new MovieCategory { CategoryId = seriesCategory.Id }],
                         MovieGenres =
@@ -233,9 +227,7 @@ namespace Backend.Data
                         RuntimeMinutes = 110,
                         AgeRating = "TV-MA",
                         ThumbnailUrl = "",
-                        BackdropUrl = "",
                         VideoUrl = "https://www.youtube.com/watch?v=6k6JO0X2AHE",
-                        YoutubeId = "6k6JO0X2AHE",
                         IsOriginal = false,
                         MovieCategories = [new MovieCategory { CategoryId = documentariesCategory.Id }],
                         MovieGenres =
@@ -254,9 +246,7 @@ namespace Backend.Data
                         RuntimeMinutes = 88,
                         AgeRating = "R",
                         ThumbnailUrl = "",
-                        BackdropUrl = "",
                         VideoUrl = "https://www.youtube.com/watch?v=4H5I1bBFt_c",
-                        YoutubeId = "4H5I1bBFt_c",
                         IsOriginal = false,
                         MovieCategories = [new MovieCategory { CategoryId = moviesCategory.Id }],
                         MovieGenres =
@@ -275,9 +265,7 @@ namespace Backend.Data
                         RuntimeMinutes = 24,
                         AgeRating = "TV-14",
                         ThumbnailUrl = "",
-                        BackdropUrl = "",
                         VideoUrl = "https://www.youtube.com/watch?v=f9v4ALp-1pI",
-                        YoutubeId = "f9v4ALp-1pI",
                         IsOriginal = true,
                         MovieCategories = [new MovieCategory { CategoryId = seriesCategory.Id }],
                         MovieGenres =
@@ -296,9 +284,7 @@ namespace Backend.Data
                         RuntimeMinutes = 60,
                         AgeRating = "TV-MA",
                         ThumbnailUrl = "",
-                        BackdropUrl = "",
                         VideoUrl = "https://www.youtube.com/watch?v=Xm2Nc6Cpl_k",
-                        YoutubeId = "Xm2Nc6Cpl_k",
                         IsOriginal = true,
                         MovieCategories = [new MovieCategory { CategoryId = specialsCategory.Id }],
                         MovieGenres =
@@ -316,9 +302,7 @@ namespace Backend.Data
                         RuntimeMinutes = 105,
                         AgeRating = "PG",
                         ThumbnailUrl = "",
-                        BackdropUrl = "",
                         VideoUrl = "https://www.youtube.com/watch?v=7TavVZMewpY",
-                        YoutubeId = "7TavVZMewpY",
                         IsOriginal = false,
                         MovieCategories = [new MovieCategory { CategoryId = moviesCategory.Id }],
                         MovieGenres =
@@ -337,9 +321,7 @@ namespace Backend.Data
                         RuntimeMinutes = 95,
                         AgeRating = "TV-14",
                         ThumbnailUrl = "",
-                        BackdropUrl = "",
                         VideoUrl = "https://www.youtube.com/watch?v=Y66jBbUjXOQ",
-                        YoutubeId = "Y66jBbUjXOQ",
                         IsOriginal = false,
                         MovieCategories = [new MovieCategory { CategoryId = documentariesCategory.Id }],
                         MovieGenres =
@@ -357,9 +339,7 @@ namespace Backend.Data
                         RuntimeMinutes = 92,
                         AgeRating = "R",
                         ThumbnailUrl = "",
-                        BackdropUrl = "",
                         VideoUrl = "https://www.youtube.com/watch?v=WMz3X5t7nC0",
-                        YoutubeId = "WMz3X5t7nC0",
                         IsOriginal = false,
                         MovieCategories = [new MovieCategory { CategoryId = moviesCategory.Id }],
                         MovieGenres =
@@ -397,9 +377,9 @@ namespace Backend.Data
                 {
                     MovieId = movies[1].Id,
                     ProfileId = mainProfile.Id,
-                    PositionInSeconds = 600,
-                    TotalDurationInSeconds = 1500,
-                    LastWatchedDate = DateTime.UtcNow.AddMinutes(-30)
+                    PositionSeconds = 600,
+                    DurationSeconds = 1500,
+                    LastUpdated = DateTime.UtcNow.AddMinutes(-30)
                 });
 
                 // Final save for all relationships

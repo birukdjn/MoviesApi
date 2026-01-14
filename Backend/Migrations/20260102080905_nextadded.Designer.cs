@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Backend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251225081357_initialMigrations")]
-    partial class initialMigrations
+    [Migration("20260102080905_nextadded")]
+    partial class nextadded
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -107,13 +107,29 @@ namespace Backend.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("EpisodeNumber")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsOriginal")
                         .HasColumnType("bit");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
 
                     b.Property<int>("ReleaseYear")
                         .HasColumnType("int");
 
                     b.Property<int>("RuntimeMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SeasonNumber")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SeriesId")
                         .HasColumnType("int");
 
                     b.Property<string>("ThumbnailUrl")
@@ -125,10 +141,6 @@ namespace Backend.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("VideoUrl")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("YoutubeId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -212,19 +224,19 @@ namespace Backend.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("LastWatchedDate")
+                    b.Property<double>("DurationSeconds")
+                        .HasColumnType("float");
+
+                    b.Property<DateTime>("LastUpdated")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("MovieId")
                         .HasColumnType("int");
 
-                    b.Property<int>("PositionInSeconds")
-                        .HasColumnType("int");
+                    b.Property<double>("PositionSeconds")
+                        .HasColumnType("float");
 
                     b.Property<int>("ProfileId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("TotalDurationInSeconds")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
@@ -299,6 +311,9 @@ namespace Backend.Migrations
 
                     b.Property<int>("Plan")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("datetime2");

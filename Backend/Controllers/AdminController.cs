@@ -1,6 +1,7 @@
 ﻿using Backend.Data;
 using Backend.DTOs.Admin;
 using Backend.DTOs.Users;
+using Backend.Enums;
 using Backend.Models;
 using Backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -20,35 +21,58 @@ namespace Backend.Controllers
         private readonly IEmailSender _emailSender = emailSender;
 
         [HttpGet("stats")]
-        [ProducesResponseType(typeof(AdminStatsDto),200)]
+        [ProducesResponseType(typeof(AdminStatsDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<AdminStatsDto>> GetStats()
         {
-            var stats = await _context.Users
-                .Select(stat => new AdminStatsDto
+            var stats = new AdminStatsDto
+            {
+
+                Users = new UserStats
                 {
-                    Users = new UserStats
-                    {
-                        TotalUsers = _context.Users.Count(),
-                        ActiveUsers = _context.Users.Count(u => u.IsActive),
-                        TotalProfiles = _context.Profiles.Count()
-                    },
-                    Content = new ContentStats
-                    {
-                        TotalMovies = _context.Movies.Count(),
-                        TotalCategories = _context.Categories.Count(),
-                        TotalGenres = _context.Genres.Count()
-                    },
-                    Engagement = new EngagementStats
-                    {
-                        TotalFavorites = _context.Favorites.Count(),
-                        TotalRatings = _context.Ratings.Count(),
-                        AverageRating = _context.Ratings.Average(r => (double?)r.Score) ?? 0
-                    },
-                    Subscriptions = new SubscriptionStats
-                    {
-                        TotalSubscriptions = _context.Subscriptions.Count()
-                    }
-                }).FirstOrDefaultAsync() ?? new AdminStatsDto();
+                    TotalUsers = await _context.Users.CountAsync(),
+                    ActiveUsers = await _context.Users.CountAsync(u => u.IsActive),
+                    TotalProfiles = await _context.Profiles.CountAsync()
+                },
+                Content = new ContentStats
+                {
+                    TotalMovies = await _context.Movies.CountAsync(m => m.MovieCategories.Any(c => c.Category.Name == "Movie")),
+                    TotalSeries = await _context.Movies.CountAsync(m => m.MovieCategories.Any(c => c.Category.Name == "Series")),
+                    TotalEpisodes = await _context.Movies.CountAsync(m => m.MovieCategories.Any(c => c.Category.Name == "Episode")),
+
+                    TotalCategories = await _context.Categories.CountAsync(),
+                    TotalGenres = await _context.Genres.CountAsync(),
+                    TotalDirectors = await _context.Movies.Select(m => m.Director).Distinct().CountAsync(),
+                    TotalLanguages = await _context.Movies.Select(m => m.Language).Distinct().CountAsync()
+                },
+                Engagement = new EngagementStats
+                {
+                    TotalFavorites = await _context.Favorites.CountAsync(),
+                    TotalRatings = await _context.Ratings.CountAsync(),
+                    AverageRating = await _context.Ratings.AnyAsync()
+                ? await _context.Ratings.AverageAsync(r => (double)r.Score)
+                : 0
+                },
+
+                Subscriptions = new SubscriptionStats
+                {
+                    TotalSubscriptions = await _context.Subscriptions.CountAsync(),
+                    BasicSubscriptions = await _context.Subscriptions.CountAsync(s => s.Plan == SubscriptionPlan.Basic),
+                    StandardSubscriptions = await _context.Subscriptions.CountAsync(s => s.Plan == SubscriptionPlan.Standard),
+                    PremiumSubscriptions = await _context.Subscriptions.CountAsync(s => s.Plan == SubscriptionPlan.Premium)
+                },
+
+                Revenue = new RevenueStats
+                {
+                    TotalRevenue = await _context.Subscriptions.Where(s => s.Status == SubscriptionStatus.Active).SumAsync(s => s.Price),
+                    BasicRevenue = await _context.Subscriptions.Where(s => s.Plan == SubscriptionPlan.Basic && s.Status == SubscriptionStatus.Active).SumAsync(s => s.Price),
+                    StandardRevenue = await _context.Subscriptions.Where(s => s.Plan == SubscriptionPlan.Standard && s.Status == SubscriptionStatus.Active).SumAsync(s => s.Price),
+                    PremiumRevenue = await _context.Subscriptions.Where(s => s.Plan == SubscriptionPlan.Premium && s.Status == SubscriptionStatus.Active).SumAsync(s => s.Price),
+                    MonthlyRevenue = await _context.Subscriptions
+                    .Where(s => s.Status == SubscriptionStatus.Active && s.StartDate >= DateTime.UtcNow.AddDays(-30))
+                    .SumAsync(s => s.Price)
+                }
+
+            };
             return Ok(stats);
         }
 
@@ -58,21 +82,20 @@ namespace Backend.Controllers
         public async Task<ActionResult<IEnumerable<object>>> GetAllUsers()
         {
             var users = await _context.Users
-                .Select(u => new
+                .Select(u => new AdminUserViewDto
                 {
-                    u.Id,
-                    u.Username,
-                    u.Name,
-                    u.Email,
-                    u.Phone,
-                    u.Role,
-                    u.CreatedAt,
-                    u.IsActive,
-                    u.IsSubscribed,
-                    u.LastLoginIp,
-                    u.Avatar,
-                    u.Profiles,
-                    u.Subscriptions
+                   Id= u.Id,
+                   Username= u.Username,
+                   Name=  u.Name,
+                   Email = u.Email,
+                   Phone = u.Phone,
+                   Role = u.Role,
+                   CreatedAt = u.CreatedAt,
+                   IsActive = u.IsActive,
+                   IsSubscribed =  u.IsSubscribed,
+                   LastLoginIp =  u.LastLoginIp,
+                   Avatar = u.Avatar,
+                    Profiles = string.Join(", ", u.Profiles.Select(p => p.Name))
                 }).ToListAsync();
             return Ok(users);
         }
