@@ -1,24 +1,25 @@
 ﻿using Backend.Data;
+using Backend.DTOs;
 using Backend.DTOs.Users;
 using Backend.Models;
+using Backend.Services.Implementations;
 using Backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using System.Security.Claims;
 
 namespace Backend.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class AuthController(AppDbContext context, IJwtService jwt, IEmailSender emailSender,IPasswordService passwordService, IConfiguration configuration) : ControllerBase
+    public class AuthController(AppDbContext context, IJwtService jwt, IEmailSender emailSender,IPasswordService passwordService,IEmailVerificationService emailVerificationService, IConfiguration configuration) : ControllerBase
     {
         private readonly AppDbContext _context = context;
         private readonly IJwtService _jwt = jwt;
         private readonly IEmailSender _emailSender = emailSender;
         private readonly IPasswordService _passwordService = passwordService;
+        private readonly IEmailVerificationService _emailVerificationService = emailVerificationService;
         private readonly IConfiguration _configuration = configuration;
 
 
@@ -124,55 +125,71 @@ namespace Backend.Controllers
 
         [HttpPost("verify-email")]
         [AllowAnonymous]
-        [ProducesResponseType(StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status409Conflict)]
-        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-
-        public async Task<IActionResult> VerifyEmail([FromBody] EmailVerificationDto dto)
+        [ProducesResponseType(typeof(EmailVerificationResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<EmailVerificationResponse>> VerifyEmail(
+    [FromBody] EmailVerificationRequest request)
         {
-            if (dto == null || string.IsNullOrWhiteSpace(dto.Token))
+            // Automatic validation if using [ApiController]
+            if (!ModelState.IsValid)
             {
-                return BadRequest( new { message = "Verification token is required." });
-            }
-            var user = await _context.Users.FirstOrDefaultAsync(u=> u.EmailVerificationToken == dto.Token);
-            
-            if (user == null || user.EmailVerificationTokenExpiry < DateTime.UtcNow)
-            {
-                return BadRequest( new { message = "Invalid or expired verification token." });
+                return ValidationProblem();
             }
 
-            if (user.IsEmailVerified)
+            var result = await _emailVerificationService.VerifyEmailAsync(request.Token);
+
+            return result switch
             {
-                return Conflict(new { message = "Email is already verified. You can now log in." });
-            }
-            user.IsEmailVerified = true;
-            user.EmailVerificationToken = null;
-            user.EmailVerificationTokenExpiry = null;
+                EmailVerificationResult.Success success => Ok(new EmailVerificationResponse(
+                    "Email verified successfully. You can now log in.",
+                    success.UserToken,
+                    success.ProfileToken,
+                    success.RefreshToken)),
 
-            var userToken = _jwt.GenerateUserToken(user);
-            var refreshToken = _jwt.GenerateRefreshToken();
+                EmailVerificationResult.AlreadyVerified => Ok(new EmailVerificationResponse(
+                    "Email is already verified. You can now log in.")),
 
-            var defaultProfile = await _context.Profiles
-                .FirstOrDefaultAsync(p => p.UserId == user.Id);
+                EmailVerificationResult.InvalidToken => BadRequest(new ProblemDetails
+                {
+                    Title = "Invalid token",
+                    Detail = "The verification token is invalid or expired.",
+                    Instance = $"{Request.Path}",
+                    Status = StatusCodes.Status400BadRequest,
+                    Type = "https://tools.ietf.org/html/rfc7231#section-6.5.1"
+                }),
 
-            if (defaultProfile == null)
-            {
-                return StatusCode(500, new { message = "Verification successful but profile data is missing." });
-            }
-            var profileToken = _jwt.GenerateProfileToken(defaultProfile);
-            user.RefreshToken = refreshToken;
-            user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(7);
+                EmailVerificationResult.ProfileMissing => StatusCode(
+                    StatusCodes.Status500InternalServerError,
+                    new ProblemDetails
+                    {
+                        Title = "Profile missing",
+                        Detail = "Verification succeeded but profile data is missing.",
+                        Instance = $"{Request.Path}",
+                        Status = StatusCodes.Status500InternalServerError,
+                        Type = "https://tools.ietf.org/html/rfc7231#section-6.6.1"
+                    }),
 
-            await _context.SaveChangesAsync();
+                EmailVerificationResult.Failure failure => StatusCode(
+                    StatusCodes.Status500InternalServerError,
+                    new ProblemDetails
+                    {
+                        Title = "Verification failed",
+                        Detail = failure.Error,
+                        Instance = $"{Request.Path}",
+                        Status = StatusCodes.Status500InternalServerError,
+                        Type = "https://tools.ietf.org/html/rfc7231#section-6.6.1"
+                    }),
 
-            return Ok( new { 
-                message = "Email verified successfully. You can now log in.",
-                userToken,        
-                profileToken,     
-                refreshToken
-
-            });
+                _ => StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails
+                {
+                    Title = "Unknown error",
+                    Detail = "An unexpected error occurred.",
+                    Instance = $"{Request.Path}",
+                    Status = StatusCodes.Status500InternalServerError,
+                    Type = "https://tools.ietf.org/html/rfc7231#section-6.6.1"
+                })
+            };
         }
 
         [HttpPost("login")]
