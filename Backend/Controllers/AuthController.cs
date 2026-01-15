@@ -26,6 +26,7 @@ namespace Backend.Controllers
         [AllowAnonymous]
         [ProducesResponseType(typeof(EmailCheckResponse),200)]
         [ProducesResponseType(typeof(object), 400)]
+        [ProducesResponseType(typeof(object), 500)]
         public async Task<ActionResult<EmailCheckResponse>> CheckEmail([FromQuery] string email)
         {
             if (string.IsNullOrWhiteSpace(email))
@@ -40,7 +41,11 @@ namespace Backend.Controllers
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] UserRegisterDto dto)
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(UserRegisterDto),201)]
+        [ProducesResponseType(typeof(object),400)]
+        [ProducesResponseType(typeof(object),500)]
+        public async Task<ActionResult> Register([FromBody] UserRegisterDto dto)
         {
             if (await _context.Users.AnyAsync(u => u.Username == dto.Username || u.Email == dto.Email))
                 return BadRequest("Username or Email already exists.");
@@ -119,9 +124,14 @@ namespace Backend.Controllers
 
         [HttpPost("verify-email")]
         [AllowAnonymous]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+
         public async Task<IActionResult> VerifyEmail([FromBody] EmailVerificationDto dto)
         {
-            if (string.IsNullOrWhiteSpace(dto.Token))
+            if (dto == null || string.IsNullOrWhiteSpace(dto.Token))
             {
                 return BadRequest( new { message = "Verification token is required." });
             }
@@ -134,7 +144,7 @@ namespace Backend.Controllers
 
             if (user.IsEmailVerified)
             {
-                return BadRequest(new { message = "Email is already verified. You can now log in." });
+                return Conflict(new { message = "Email is already verified. You can now log in." });
             }
             user.IsEmailVerified = true;
             user.EmailVerificationToken = null;
@@ -144,7 +154,6 @@ namespace Backend.Controllers
             var refreshToken = _jwt.GenerateRefreshToken();
 
             var defaultProfile = await _context.Profiles
-                .Include(p => p.User)
                 .FirstOrDefaultAsync(p => p.UserId == user.Id);
 
             if (defaultProfile == null)
