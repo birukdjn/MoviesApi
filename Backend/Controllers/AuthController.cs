@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using System.Security.Claims;
 
 namespace Backend.Controllers
@@ -23,12 +24,19 @@ namespace Backend.Controllers
 
         [HttpGet("check-email")]
         [AllowAnonymous]
-        public async Task<IActionResult> CheckEmail([FromQuery] string email)
+        [ProducesResponseType(typeof(EmailCheckResponse),200)]
+        [ProducesResponseType(typeof(object), 400)]
+        public async Task<ActionResult<EmailCheckResponse>> CheckEmail([FromQuery] string email)
         {
-            email = email.Trim().ToLower();
-            var exists = await _context.Users.AnyAsync(u => u.Email.ToLower() == email);
-            return Ok(new { exists });
+            if (string.IsNullOrWhiteSpace(email))
+                return BadRequest("Email is required.");
 
+            var normalizedEmail = email.Trim().ToLowerInvariant();
+
+            var exists = await _context.Users
+                .AnyAsync(u => u.Email == normalizedEmail);
+
+            return Ok(new EmailCheckResponse(exists));
         }
 
         [HttpPost("register")]
@@ -54,7 +62,7 @@ namespace Backend.Controllers
                 EmailVerificationToken = verificationToken,
                 EmailVerificationTokenExpiry = verificationExpiry
             };
-
+            user.Email = user.Email.Trim().ToLowerInvariant();
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
