@@ -1,12 +1,11 @@
 ﻿using Backend.Data;
-using Backend.DTOs;
 using Backend.DTOs.Users;
 using Backend.Models;
-using Backend.Services.Implementations;
 using Backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 
 namespace Backend.Controllers
@@ -32,6 +31,8 @@ namespace Backend.Controllers
         {
             if (string.IsNullOrWhiteSpace(email))
                 return BadRequest("Email is required.");
+            if (!new EmailAddressAttribute().IsValid(email))
+                return BadRequest("Invalid email format.");
 
             var normalizedEmail = email.Trim().ToLowerInvariant();
 

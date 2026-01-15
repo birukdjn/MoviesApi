@@ -32,6 +32,7 @@ services.AddScoped<IMovieService, MovieService>();
 services.AddScoped<IEmailSender, EmailSender>();
 services.AddHttpClient<ChapaService>();
 services.AddScoped<IPasswordService, PasswordService>();
+services.AddScoped<IEmailVerificationService, EmailVerificationService>();
 services.AddScoped<IJwtService, JwtService>();
 services.Configure<TwilioSettings>(
     configuration.GetSection("Twilio"));
