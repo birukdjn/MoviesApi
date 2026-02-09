@@ -2,7 +2,7 @@
 using Backend.Models;
 using Backend.Services.Interfaces;
 
-namespace Backend.Data
+namespace Backend.Data.Seed
 {
     public static class DbSeeder
     {

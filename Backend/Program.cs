@@ -1,7 +1,8 @@
 ﻿using Backend.Attributes;
 using Backend.Configuration;
 using Backend.Data;
-using Backend.Middleware;
+using Backend.Data.Middleware;
+using Backend.Data.Seed;
 using Backend.Services.Implementations;
 using Backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;

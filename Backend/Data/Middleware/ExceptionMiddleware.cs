@@ -2,7 +2,7 @@
 using System.Text.Json;
 using Backend.DTOs;
 
-namespace Backend.Middleware;
+namespace Backend.Data.Middleware;
 
 public class ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddleware> logger, IHostEnvironment env)
 {
