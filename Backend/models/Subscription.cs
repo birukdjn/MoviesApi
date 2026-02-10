@@ -15,7 +15,6 @@ namespace Backend.Models
 
         public User User { get; set; } = null!;
         public decimal Price { get; set; }
-
         public SubscriptionPlan Plan { get; set; } = SubscriptionPlan.Basic;
 
         public DateTime StartDate { get; set; } = DateTime.UtcNow;

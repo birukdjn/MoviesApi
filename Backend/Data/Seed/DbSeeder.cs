@@ -126,17 +126,43 @@ namespace Backend.Data.Seed
                     CreatedAt = DateTime.UtcNow,
                     IsEmailVerified = true,
                     IsSubscribed = true,
+                    SubscriptionExpiresAt = DateTime.UtcNow.AddMonths(2100)
+
 
                 };
                 context.Users.Add(basicUser);
                 context.SaveChanges();
+
+                var anotherUser = new User
+                {
+                    Username = "users",
+                    Email = "user2@gmail.com",
+                    PasswordHash = PasswordService.HashPassword("user1234"),
+                    Role = "User",
+                    Phone = "+251777888326",
+                    CreatedAt = DateTime.UtcNow,
+                    IsEmailVerified = true,
+                    IsSubscribed = true,
+                };
+                context.Users.Add(anotherUser);
+                context.SaveChanges();
+
+                var otherProfile = new Profile
+                {
+                    Name = "Other Profile",
+                    Avatar = "/avatars/other.png",
+                    IsKidsProfile = false,
+                    UserId = anotherUser.Id,
+                    
+                };
 
                 var mainProfile = new Profile
                 {
                     Name = "User Profile",
                     Avatar = "/avatars/user.png",
                     IsKidsProfile = false,
-                    UserId = basicUser.Id
+                    UserId = basicUser.Id,
+                    
                 };
                 context.Profiles.Add(mainProfile);
 
